@@ -1,1 +1,5 @@
-
+tensorflow
+datasets
+pillow
+numpy
+scikit-learn
