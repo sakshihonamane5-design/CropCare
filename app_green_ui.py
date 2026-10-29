@@ -17,6 +17,11 @@ from PIL import Image
 import streamlit as st
 
 from src.cropcare.climate_engine import get_environment
+from src.cropcare.agronomy_engine import (
+    calculate_foliar_damage_index,
+    classify_disease_severity,
+    get_nurturing_recommendations,
+)
 from src.cropcare.image_engine import (
     get_registered_field_leaves,
     get_supported_crops,
@@ -939,6 +944,134 @@ elif st.session_state.screen == 2:
                                     unsafe_allow_html=True,
                                 )
 
+                    # ==================================================================
+                    # DISEASE PROGRESSION STAGE & SEVERITY ASSESSMENT
+                    # ==================================================================
+                    sev = classify_disease_severity(
+                        st.session_state.leaf_image,
+                        disease_name=disease,
+                        confidence=conf,
+                    )
+                    st.markdown("---")
+                    st.markdown("#### 🔬 Pathological Severity & Foliar Progression Stage")
+
+                    sev_colors = sev["color_theme"]
+                    st.markdown(
+                        f"""
+                        <div style="background: #FFFFFF; border: 1.5px solid {sev_colors['border']}; border-radius: 14px; padding: 1.1rem 1.3rem; margin-top: 0.6rem; margin-bottom: 1.2rem; box-shadow: 0 4px 14px rgba(0,0,0,0.04);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+                                <span style="background: {sev_colors['badge_bg']}; color: {sev_colors['badge_text']}; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; padding: 0.25rem 0.75rem; border-radius: 20px; border: 1px solid {sev_colors['border']};">
+                                    {sev['severity_level']}
+                                </span>
+                                <span style="font-size: 0.84rem; font-weight: 700; color: #526E60;">
+                                    Foliar Damage: <strong>{sev['damage_percentage']:.1f}% Canopy Affected</strong>
+                                </span>
+                            </div>
+                            <div style="font-family: 'Space Grotesk', sans-serif; font-size: 1.3rem; font-weight: 800; color: #123D2A; margin-bottom: 0.4rem;">
+                                {sev['stage_name']}
+                            </div>
+                            <div style="width: 100%; background: #E8ECE6; border-radius: 8px; height: 10px; margin-bottom: 0.8rem; overflow: hidden;">
+                                <div style="width: {max(6.0, sev['damage_percentage'])}%; height: 100%; background: {sev_colors['progress_gradient']}; border-radius: 8px;"></div>
+                            </div>
+                            <div style="font-size: 0.85rem; color: #2A4736; line-height: 1.5; margin-bottom: 0.6rem;">
+                                <strong>Physiological State:</strong> {sev['pathological_state']}
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; font-weight: 600; color: #526E60; border-top: 1px solid #E8ECE6; padding-top: 0.5rem;">
+                                <span>⏱️ <strong>Urgency:</strong> {sev['urgency']}</span>
+                                <span>📈 <strong>Prognosis:</strong> {sev['prognosis'][:50]}...</span>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    # ==================================================================
+                    # AGRONOMIC NURTURING & CULTURAL REMEDIATION PROTOCOL
+                    # ==================================================================
+                    nurture = get_nurturing_recommendations(
+                        crop=crop,
+                        disease=disease,
+                        severity_stage=sev["stage_id"],
+                    )
+                    st.markdown("#### 🌾 Farmer Nurturing Protocol: Actionable Crop Care Changes")
+                    st.caption(f"Science-backed adjustments to irrigation, soil nutrition, and canopy care to eliminate {disease}:")
+
+                    n_tab1, n_tab2, n_tab3, n_tab4 = st.tabs([
+                        "💧 1. Irrigation Regimen",
+                        "🧪 2. Soil & Nutrients (NPK)",
+                        "✂️ 3. Canopy & Sanitation",
+                        "🛡️ 4. Bio-Defense Shield",
+                    ])
+
+                    with n_tab1:
+                        st.markdown(
+                            f"""
+                            <div style="background: #F8FAF7; border-left: 4px solid #0284C7; border-radius: 8px; padding: 0.9rem 1.1rem; margin-top: 0.4rem;">
+                                <div style="font-weight: 700; color: #0369A1; font-size: 0.95rem; margin-bottom: 0.3rem;">
+                                    💧 {nurture['irrigation']['action']}
+                                </div>
+                                <div style="font-size: 0.85rem; color: #334155; line-height: 1.55; margin-bottom: 0.5rem;">
+                                    {nurture['irrigation']['details']}
+                                </div>
+                                <div style="font-size: 0.8rem; font-weight: 600; color: #0284C7;">
+                                    📅 <strong>Frequency Mandate:</strong> {nurture['irrigation']['frequency']}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                    with n_tab2:
+                        st.markdown(
+                            f"""
+                            <div style="background: #FDFEF9; border-left: 4px solid #16A34A; border-radius: 8px; padding: 0.9rem 1.1rem; margin-top: 0.4rem;">
+                                <div style="font-weight: 700; color: #15803D; font-size: 0.95rem; margin-bottom: 0.3rem;">
+                                    🧪 {nurture['nutrition']['action']}
+                                </div>
+                                <div style="font-size: 0.85rem; color: #334155; line-height: 1.55; margin-bottom: 0.5rem;">
+                                    {nurture['nutrition']['details']}
+                                </div>
+                                <div style="font-size: 0.8rem; font-weight: 600; color: #15803D;">
+                                    💡 <strong>Nutrient Guidance:</strong> {nurture['nutrition']['fertilizer_tip']}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                    with n_tab3:
+                        st.markdown(
+                            f"""
+                            <div style="background: #FDFCF7; border-left: 4px solid #D97706; border-radius: 8px; padding: 0.9rem 1.1rem; margin-top: 0.4rem;">
+                                <div style="font-weight: 700; color: #B45309; font-size: 0.95rem; margin-bottom: 0.3rem;">
+                                    ✂️ {nurture['sanitation']['action']}
+                                </div>
+                                <div style="font-size: 0.85rem; color: #334155; line-height: 1.55; margin-bottom: 0.5rem;">
+                                    {nurture['sanitation']['details']}
+                                </div>
+                                <div style="font-size: 0.8rem; font-weight: 600; color: #B45309;">
+                                    🧼 <strong>Implement Hygiene:</strong> {nurture['sanitation'].get('tools', 'Sanitize shears between plants.')}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                    with n_tab4:
+                        st.markdown(
+                            f"""
+                            <div style="background: #FAF7FC; border-left: 4px solid #7C3AED; border-radius: 8px; padding: 0.9rem 1.1rem; margin-top: 0.4rem;">
+                                <div style="font-weight: 700; color: #6D28D9; font-size: 0.95rem; margin-bottom: 0.3rem;">
+                                    🛡️ {nurture['bio_defense']['action']}
+                                </div>
+                                <div style="font-size: 0.85rem; color: #334155; line-height: 1.55;">
+                                    {nurture['bio_defense']['details']}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
                     st.markdown(
                         """
                         <div class="disclaimer-banner">
@@ -1343,6 +1476,25 @@ elif st.session_state.screen == 4:
             mem_match = leaf_res.get("field_memory_match")
             if mem_match:
                 st.info(f"🧠 Verified against Active Field Memory: {mem_match.get('crop')} — {mem_match.get('disease')}")
+
+            sev_s4 = classify_disease_severity(
+                st.session_state.leaf_image,
+                disease_name=disease,
+                confidence=conf,
+            )
+            st.markdown(
+                f"""
+                <div style="background: #FDFEFB; border: 1px solid #DFE7DB; border-radius: 10px; padding: 0.75rem 1rem; margin-top: 0.6rem; margin-bottom: 0.6rem;">
+                    <div style="font-size: 0.78rem; font-weight: 700; color: #123D2A;">
+                        Pathological Stage: <span style="color: #1B543A;">{sev_s4['stage_name']}</span>
+                    </div>
+                    <div style="font-size: 0.75rem; color: #526E60; margin-top: 0.2rem;">
+                        Severity: <strong>{sev_s4['severity_level']}</strong> | Foliar Coverage: <strong>{sev_s4['damage_percentage']:.1f}%</strong>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
             if uncert:
                 st.warning("Flagged: Ambiguous / Low Confidence Screening. Field verification advised.")

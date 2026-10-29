@@ -1,5 +1,10 @@
 """CropCare package initialization."""
 
+from src.cropcare.agronomy_engine import (
+    calculate_foliar_damage_index,
+    classify_disease_severity,
+    get_nurturing_recommendations,
+)
 from src.cropcare.image_engine import (
     CROP_METADATA,
     check_image_quality,
@@ -28,4 +33,7 @@ __all__ = [
     "get_registered_field_leaves",
     "CROP_METADATA",
     "get_environment",
+    "calculate_foliar_damage_index",
+    "classify_disease_severity",
+    "get_nurturing_recommendations",
 ]
