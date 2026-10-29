@@ -79,6 +79,7 @@ samples = {
     "sample_potato_late_blight.png": dict(base_color=(55, 125, 45), leaf_shape="ovate", lesion_type="water_soaked"),
     "sample_corn_common_rust.png": dict(base_color=(75, 145, 50), leaf_shape="linear", lesion_type="pustules"),
     "sample_apple_scab.png": dict(base_color=(50, 130, 45), leaf_shape="ovate", lesion_type="scab"),
+    "sample_rice_brown_spot.png": dict(base_color=(55, 140, 50), leaf_shape="linear", lesion_type="target_rings"),
 }
 
 for fname, kwargs in samples.items():

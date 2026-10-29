@@ -458,6 +458,21 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# Interactive Top Navigation Buttons
+t_col1, t_col2, t_col3, t_col4 = st.columns(4)
+nav_items = [
+    (t_col1, 1, "🏠 1. Welcome"),
+    (t_col2, 2, "🍃 2. Leaf Screening & Studio"),
+    (t_col3, 3, "🌦️ 3. Climate Insights"),
+    (t_col4, 4, "📋 4. Executive Summary"),
+]
+for col, s_num, s_title in nav_items:
+    with col:
+        b_type = "primary" if st.session_state.screen == s_num else "secondary"
+        if st.button(s_title, key=f"tnav_{s_num}", type=b_type, use_container_width=True):
+            st.session_state.screen = s_num
+            st.rerun()
+
 # Render Persistent Guided Step Indicator
 curr = st.session_state.screen
 step1_cls = "active" if curr == 1 else ("completed" if curr > 1 else "")
@@ -479,7 +494,7 @@ st.markdown(
         <div class="step-divider {div1_cls}"></div>
         <div class="step-item {step2_cls}">
             <div class="step-pill">2</div>
-            <span>Leaf Screening</span>
+            <span>Leaf Screening & Continual Studio</span>
         </div>
         <div class="step-divider {div2_cls}"></div>
         <div class="step-item {step3_cls}">
@@ -519,9 +534,13 @@ if st.session_state.screen == 1:
             unsafe_allow_html=True,
         )
 
-        c1, c2 = st.columns([1, 1.5])
+        c1, c2 = st.columns([1, 1.3])
         with c1:
             if st.button("Start Screening →", type="primary", use_container_width=True):
+                st.session_state.screen = 2
+                st.rerun()
+        with c2:
+            if st.button("🧠 Continual Learning Studio Tab →", type="secondary", use_container_width=True):
                 st.session_state.screen = 2
                 st.rerun()
 
@@ -583,11 +602,11 @@ if st.session_state.screen == 1:
         st.markdown(
             """
             <div class="feature-card">
-                <div class="feature-icon">🌦️</div>
-                <div class="feature-title">Historical Weather Baselines</div>
+                <div class="feature-icon">🧠</div>
+                <div class="feature-title">Continual Learning Studio</div>
                 <div class="feature-body">
-                    Automated Open-Meteo multi-year comparisons highlighting temperature and precipitation
-                    deviations over 7, 14, or 30 days.
+                    Encountered an unmonitored crop (e.g. Rice, Wheat, Cotton)? Upload reference photos in 
+                    the Continual Learning tab to train the dynamic 1024-dim neural feature bank in real time!
                 </div>
             </div>
             """,
@@ -627,15 +646,21 @@ elif st.session_state.screen == 2:
         unsafe_allow_html=True,
     )
 
-    tab_screening, tab_studio = st.tabs([
-        "🍃 Diagnostic Leaf Screening",
-        "🧠 Continual Learning & Training Studio",
+    tab_screening, tab_studio, tab_library = st.tabs([
+        "🍃 1. Diagnostic Leaf Screening",
+        "🧠 2. Continual Learning Studio (Upload & Teach Model)",
+        "📚 3. Monitored Crops Library (14 Species, 38 Pathologies)",
     ])
 
     # --------------------------------------------------------------------------
     # TAB 1: DIAGNOSTIC LEAF SCREENING
     # --------------------------------------------------------------------------
     with tab_screening:
+        st.info(
+            "💡 **Looking to train/adapt the model on new crops or rare diseases?** "
+            "Switch to the **'🧠 2. Continual Learning Studio (Upload & Teach Model)'** tab directly above to register reference photos and expand the memory bank in 1 click!",
+            icon="🧠",
+        )
         crops_catalog = get_supported_crops()
 
         st.markdown("#### 🎯 Target Crop Selection")
@@ -713,13 +738,14 @@ elif st.session_state.screen == 2:
 
         # Quick Sample Selector
         st.markdown("##### ⚡ Quick-Test with Curated Botanical Samples:")
-        sm_c1, sm_c2, sm_c3, sm_c4, sm_c5 = st.columns(5)
+        sm_c1, sm_c2, sm_c3, sm_c4, sm_c5, sm_c6 = st.columns(6)
         sample_items = [
-            (sm_c1, "🍅 Tomato Early Blight", "data/sample_leaves/sample_tomato_early_blight.png", "Tomato"),
-            (sm_c2, "🥔 Potato Late Blight", "data/sample_leaves/sample_potato_late_blight.png", "Potato"),
+            (sm_c1, "🍅 Tomato Blight", "data/sample_leaves/sample_tomato_early_blight.png", "Tomato"),
+            (sm_c2, "🥔 Potato Blight", "data/sample_leaves/sample_potato_late_blight.png", "Potato"),
             (sm_c3, "🌽 Corn Rust", "data/sample_leaves/sample_corn_common_rust.png", "Corn_(maize)"),
             (sm_c4, "🍎 Apple Scab", "data/sample_leaves/sample_apple_scab.png", "Apple"),
             (sm_c5, "🌿 Tomato Healthy", "data/sample_leaves/sample_tomato_healthy.png", "Tomato"),
+            (sm_c6, "🌾 Rice (Continual Demo)", "data/sample_leaves/sample_rice_brown_spot.png", "All Crops (Auto-Detect)"),
         ]
 
         for col, btn_label, file_path, def_crop in sample_items:
@@ -729,9 +755,10 @@ elif st.session_state.screen == 2:
                         loaded_img = Image.open(file_path)
                         st.session_state.leaf_image = loaded_img
                         st.session_state.selected_crop_type = def_crop
+                        filter_arg = None if def_crop == "All Crops (Auto-Detect)" else def_crop
                         st.session_state.leaf_result = predict_image(
                             loaded_img,
-                            crop_filter=def_crop,
+                            crop_filter=filter_arg,
                             use_tta=st.session_state.use_tta_boost,
                         )
                         st.rerun()
@@ -941,6 +968,45 @@ elif st.session_state.screen == 2:
             unsafe_allow_html=True,
         )
 
+        # Quick Hackathon Demonstration & Presets
+        st.markdown("##### ⚡ Quick Hackathon Demonstration & Presets:")
+        d_col1, d_col2 = st.columns([1.5, 1])
+        with d_col1:
+            if st.button("🚀 1-Click Demo: Teach Model Rice (Brown Spot)", key="btn_demo_rice", type="secondary"):
+                sample_rice = "data/sample_leaves/sample_rice_brown_spot.png"
+                if os.path.exists(sample_rice):
+                    r_img = Image.open(sample_rice)
+                    reg_out = register_field_leaf(
+                        r_img,
+                        crop="Rice",
+                        disease="Brown Spot",
+                        notes="Oryza sativa lowland paddy specimen with fungal spindle lesions.",
+                    )
+                    if reg_out.get("success"):
+                        st.success(
+                            f"✅ Registered sample #{reg_out.get('total_samples', 1)}! "
+                            f"Trained neural memory bank for **Rice — Brown Spot**! "
+                            f"Now test the '🌾 Rice (Continual Demo)' in Diagnostic Leaf Screening to see immediate detection."
+                        )
+                        st.rerun()
+                    else:
+                        st.error(f"Registration failed: {reg_out.get('error')}")
+                else:
+                    st.error("Demo image not found at data/sample_leaves/sample_rice_brown_spot.png")
+
+        with d_col2:
+            if st.button("🗑️ Reset Field Memory Bank", key="btn_reset_mem"):
+                mem_path = "data/field_memory/memory_bank.json"
+                if os.path.exists(mem_path):
+                    try:
+                        os.remove(mem_path)
+                        st.info("Field memory bank reset successfully.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error resetting memory bank: {e}")
+                else:
+                    st.info("Memory bank is already empty.")
+
         st_col_left, st_col_right = st.columns([1, 1], gap="large")
 
         with st_col_left:
@@ -1025,6 +1091,32 @@ elif st.session_state.screen == 2:
                     "No custom field samples registered yet. "
                     "Upload and register a sample on the left to teach the platform any new crop or disease!"
                 )
+
+    # --------------------------------------------------------------------------
+    # TAB 3: MONITORED CROPS LIBRARY
+    # --------------------------------------------------------------------------
+    with tab_library:
+        st.markdown("#### 📚 Complete Catalog of 14 Monitored Crops & 38 Pathologies")
+        st.caption("CropCare is pre-trained to differentiate among the following conditions across 14 major agricultural crops:")
+        crops_catalog = get_supported_crops()
+        cat_cols = st.columns(2)
+        c_idx = 0
+        for k_raw, meta in sorted(crops_catalog.items(), key=lambda x: x[1]["display_name"]):
+            with cat_cols[c_idx % 2]:
+                st.markdown(
+                    f"""
+                    <div style="background: #FDFEFB; border: 1px solid #DFE7DB; border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 0.75rem;">
+                        <div style="font-weight: 700; color: #123D2A; font-size: 0.98rem;">
+                            {meta['icon']} {meta['display_name']} <span style="font-size: 0.78rem; font-weight: 600; color: #526E60;">({len(meta['diseases'])} conditions)</span>
+                        </div>
+                        <div style="font-size: 0.8rem; color: #2A7352; margin-top: 0.35rem; line-height: 1.4;">
+                            {' • '.join(meta['diseases'])}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            c_idx += 1
 
     # Guided Screen 2 Navigation
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
