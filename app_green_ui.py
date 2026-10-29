@@ -16,6 +16,9 @@ import pandas as pd
 from PIL import Image
 import streamlit as st
 
+from src.cropcare.climate_engine import get_environment
+from src.cropcare.image_engine import get_supported_crops, predict_image
+
 # Configure page layout and title
 st.set_page_config(
     page_title="CropCare — Agronomic Intelligence",
@@ -622,8 +625,6 @@ elif st.session_state.screen == 2:
     # --------------------------------------------------------------------------
     # CROP SELECTOR BAR & TARGET ISOLATION
     # --------------------------------------------------------------------------
-    from src.cropcare.image_engine import get_supported_crops, predict_image
-
     crops_catalog = get_supported_crops()
 
     st.markdown("#### 🎯 Target Crop Selection")
