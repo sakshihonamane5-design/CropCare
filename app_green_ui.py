@@ -336,6 +336,49 @@ st.markdown(
         background-color: var(--ivory-bg) !important;
         border-color: var(--forest-mid) !important;
     }
+
+    /* Floating CropCare AI Assistant Launcher */
+    .st-key-chat_launcher_btn {
+        position: fixed !important;
+        bottom: 24px !important;
+        right: 24px !important;
+        z-index: 999990 !important;
+    }
+    .st-key-chat_launcher_btn > button {
+        border-radius: 50px !important;
+        padding: 0.75rem 1.4rem !important;
+        background: var(--forest-dark) !important;
+        color: var(--lime-accent) !important;
+        border: 2px solid var(--lime-accent) !important;
+        box-shadow: 0 10px 25px rgba(18, 61, 42, 0.4) !important;
+        font-weight: 700 !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+    }
+    .st-key-chat_launcher_btn > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 14px 30px rgba(18, 61, 42, 0.5) !important;
+    }
+
+    /* Floating Chat Dialog Panel */
+    .st-key-cropcare_chat_panel {
+        position: fixed !important;
+        bottom: 85px !important;
+        right: 24px !important;
+        width: 390px !important;
+        max-width: calc(100vw - 48px) !important;
+        max-height: calc(100vh - 110px) !important;
+        background: var(--surface-white) !important;
+        border: 1.5px solid rgba(18, 61, 42, 0.18) !important;
+        border-radius: 20px !important;
+        box-shadow: 0 20px 50px rgba(18, 61, 42, 0.3) !important;
+        z-index: 999995 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        padding: 1.2rem !important;
+        overflow: hidden !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -349,6 +392,9 @@ if "screen" not in st.session_state:
 
 if "leaf_image" not in st.session_state:
     st.session_state.leaf_image = None
+
+if "leaf_image_id" not in st.session_state:
+    st.session_state.leaf_image_id = None
 
 if "leaf_result" not in st.session_state:
     st.session_state.leaf_result = None
@@ -364,6 +410,12 @@ if "climate_days" not in st.session_state:
 
 if "climate_result" not in st.session_state:
     st.session_state.climate_result = None
+
+if "chat_open" not in st.session_state:
+    st.session_state.chat_open = False
+
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = []
 
 
 def format_metric(value: Optional[float], unit: str = "", precision: int = 1) -> str:
@@ -559,24 +611,66 @@ elif st.session_state.screen == 2:
     leaf_col_left, leaf_col_right = st.columns([1, 1], gap="large")
 
     with leaf_col_left:
-        st.markdown("#### 📤 Upload Leaf Photograph")
-        uploaded_file = st.file_uploader(
-            "Select leaf image (JPG, JPEG, PNG)",
-            type=["jpg", "jpeg", "png"],
-            help="High-contrast, focused imagery centered on a single leaf produces the most reliable screening.",
+        st.markdown("#### 📷 Leaf Image Acquisition")
+
+        input_mode = st.radio(
+            "Select Acquisition Method:",
+            options=["📁 Upload Image", "📸 Click Photo (Camera)"],
+            horizontal=True,
+            help="Choose between capturing a live photo using your camera or selecting an existing image file.",
         )
 
-        if uploaded_file is not None:
+        active_file = None
+        new_source_id = None
+
+        if input_mode == "📁 Upload Image":
+            active_file = st.file_uploader(
+                "Select leaf image (JPG, JPEG, PNG)",
+                type=["jpg", "jpeg", "png"],
+                key="leaf_uploader",
+                help="High-contrast, focused imagery centered on a single leaf produces the most reliable screening.",
+            )
+            if active_file is not None:
+                new_source_id = f"upload_{active_file.name}_{active_file.size}"
+
+        else:
+            active_file = st.camera_input(
+                "Capture live leaf photograph",
+                key="leaf_camera",
+                help="Center the plant leaf in the frame with uniform lighting and click Take Photo.",
+            )
+            if active_file is not None:
+                new_source_id = f"camera_{active_file.name}_{active_file.size}"
+
+        # If a new image was captured or uploaded, decode it and clear stale prediction results
+        if active_file is not None and new_source_id != st.session_state.leaf_image_id:
             try:
-                img = Image.open(uploaded_file)
+                img = Image.open(active_file).convert("RGB")
                 st.session_state.leaf_image = img
-                st.image(img, caption="Loaded Leaf Image", use_container_width=True)
+                st.session_state.leaf_image_id = new_source_id
+                st.session_state.leaf_result = None  # Clear previous prediction for new image
             except Exception as e:
                 st.error(f"Image decoding failed: {e}")
 
-        # Run Screening Action
+        # Display preview and action controls if an image is currently loaded
         if st.session_state.leaf_image is not None:
-            if st.button("Run Leaf Screening ⚡", type="primary", use_container_width=True):
+            st.image(
+                st.session_state.leaf_image,
+                caption="Preview: Selected Leaf Image",
+                use_container_width=True,
+            )
+
+            btn_col1, btn_col2 = st.columns([1.5, 1])
+            with btn_col1:
+                run_screening = st.button("Run Leaf Screening ⚡", type="primary", use_container_width=True)
+            with btn_col2:
+                if st.button("🔄 Clear / Retake", type="secondary", use_container_width=True):
+                    st.session_state.leaf_image = None
+                    st.session_state.leaf_image_id = None
+                    st.session_state.leaf_result = None
+                    st.rerun()
+
+            if run_screening:
                 with st.spinner("Executing neural inference via MobileNetV3..."):
                     try:
                         from src.cropcare.image_engine import predict_image
@@ -586,7 +680,7 @@ elif st.session_state.screen == 2:
                     except Exception as inf_err:
                         st.error(f"Inference execution error: {inf_err}")
         else:
-            st.info("Please upload a leaf photograph above to enable diagnostic screening.")
+            st.info("Please capture or upload a leaf photograph above to enable diagnostic screening.")
 
     with leaf_col_right:
         st.markdown("#### 🔬 Neural Diagnostic Output")
@@ -978,6 +1072,105 @@ elif st.session_state.screen == 4:
         if st.button("🔄 Start New Screening Session", type="primary"):
             st.session_state.screen = 1
             st.session_state.leaf_image = None
+            st.session_state.leaf_image_id = None
             st.session_state.leaf_result = None
             st.session_state.climate_result = None
             st.rerun()
+
+
+# ==============================================================================
+# FLOATING CROPCARE AI ASSISTANT (Persistent on all 4 workflow screens)
+# ==============================================================================
+def render_cropcare_chatbot() -> None:
+    """Render the floating Gemini AI Assistant launcher and interactive panel."""
+    # Floating Launcher Button in Bottom-Right
+    launcher_label = "💬 CropCare AI" if not st.session_state.chat_open else "✕ Close Assistant"
+    if st.button(
+        launcher_label,
+        key="chat_launcher_btn",
+        help="Ask questions about crop diseases, screening, or climate insights",
+    ):
+        st.session_state.chat_open = not st.session_state.chat_open
+        st.rerun()
+
+    # Floating Dialog Panel when Open
+    if st.session_state.chat_open:
+        with st.container(key="cropcare_chat_panel"):
+            head_col1, head_col2, head_col3 = st.columns([3, 0.8, 0.8])
+            with head_col1:
+                st.markdown(
+                    "<div style='font-family: \"Space Grotesk\", sans-serif; font-size: 1.15rem; font-weight: 700; color: #123D2A;'>🌱 CropCare Assistant</div>",
+                    unsafe_allow_html=True,
+                )
+            with head_col2:
+                if st.button("🗑️", key="chat_clear_btn", help="Clear conversation history"):
+                    st.session_state.chat_messages = []
+                    st.rerun()
+            with head_col3:
+                if st.button("✕", key="chat_close_btn", help="Close Assistant"):
+                    st.session_state.chat_open = False
+                    st.rerun()
+
+            st.caption("Agronomic Guidance • Powered by Google Gemini")
+
+            # Suggested Prompts (shown when conversation is new)
+            if len(st.session_state.chat_messages) <= 1:
+                st.markdown(
+                    "<div style='font-size: 0.8rem; font-weight: 600; color: #526E60; margin-bottom: 0.2rem;'>Suggested Questions:</div>",
+                    unsafe_allow_html=True,
+                )
+                chip_col1, chip_col2 = st.columns(2)
+                from src.cropcare.chat_engine import SUGGESTED_PROMPTS
+
+                with chip_col1:
+                    if st.button(SUGGESTED_PROMPTS[0], key="sug_chip_0", use_container_width=True):
+                        _submit_chat_message(SUGGESTED_PROMPTS[0])
+                        st.rerun()
+                with chip_col2:
+                    if st.button(SUGGESTED_PROMPTS[1], key="sug_chip_1", use_container_width=True):
+                        _submit_chat_message(SUGGESTED_PROMPTS[1])
+                        st.rerun()
+
+            # Message History Box
+            chat_container = st.container(height=260)
+            with chat_container:
+                if not st.session_state.chat_messages:
+                    st.markdown(
+                        "<div style='color: #526E60; font-size: 0.86rem; text-align: center; margin-top: 2rem; line-height: 1.5;'>"
+                        "👋 <strong>Welcome!</strong><br>Ask about crop diseases, symptoms, your leaf screening results, or local climate stress factors."
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    for turn in st.session_state.chat_messages:
+                        role = turn.get("role", "user")
+                        with st.chat_message(role, avatar="🧑‍🌾" if role == "user" else "🌱"):
+                            st.markdown(turn.get("content", ""))
+
+            # Input Prompt
+            prompt_text = st.chat_input("Ask about crops, disease, or weather...", key="chat_user_prompt")
+            if prompt_text:
+                _submit_chat_message(prompt_text)
+                st.rerun()
+
+
+def _submit_chat_message(user_text: str) -> None:
+    """Send user text to Gemini with contextual session state and append reply."""
+    st.session_state.chat_messages.append({"role": "user", "content": user_text})
+    from src.cropcare.chat_engine import build_agronomic_context, generate_chat_response
+
+    ctx = build_agronomic_context(
+        screen=st.session_state.screen,
+        leaf_result=st.session_state.leaf_result,
+        climate_result=st.session_state.climate_result,
+        climate_days=st.session_state.climate_days,
+    )
+    with st.spinner("Consulting CropCare Assistant..."):
+        reply = generate_chat_response(
+            messages=st.session_state.chat_messages,
+            context_str=ctx,
+        )
+    st.session_state.chat_messages.append({"role": "assistant", "content": reply})
+
+
+render_cropcare_chatbot()
