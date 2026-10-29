@@ -342,6 +342,14 @@ def format_metric(value: Optional[float], unit: str = "", precision: int = 1) ->
     return f"{value:.{precision}f} {unit}".strip()
 
 
+def display_image(image, caption: Optional[str] = None) -> None:
+    """Safely render an image across Streamlit versions (1.38 use_column_width vs newer use_container_width)."""
+    try:
+        st.image(image, caption=caption, use_column_width=True)
+    except TypeError:
+        st.image(image, caption=caption, use_container_width=True)
+
+
 # ==============================================================================
 # TOP BRANDING & LANGUAGE SWITCHER
 # ==============================================================================
@@ -534,16 +542,15 @@ elif st.session_state.screen == 2:
         if st.session_state.cam_result and st.session_state.cam_result.get("overlay_image"):
             t_orig, t_cam = st.tabs(["📷 Original Photograph", "🔥 Explainable AI (Grad-CAM)"])
             with t_orig:
-                st.image(st.session_state.leaf_image, caption="Uploaded Leaf Specimen", use_container_width=True)
+                display_image(st.session_state.leaf_image, caption="Uploaded Leaf Specimen")
             with t_cam:
-                st.image(
+                display_image(
                     st.session_state.cam_result["overlay_image"],
                     caption="Grad-CAM Saliency: Spatial Lesion Attention",
-                    use_container_width=True,
                 )
                 st.caption(f"🎯 **Attention Analysis:** {st.session_state.cam_result.get('focus_description')}")
         elif st.session_state.leaf_image is not None:
-            st.image(st.session_state.leaf_image, caption="Loaded Leaf Image", use_container_width=True)
+            display_image(st.session_state.leaf_image, caption="Loaded Leaf Image")
 
         # Run Screening Action
         if st.session_state.leaf_image is not None:
