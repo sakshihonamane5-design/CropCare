@@ -1,1 +1,6 @@
-
+streamlit
+pillow
+requests
+numpy
+torch
+torchvision
