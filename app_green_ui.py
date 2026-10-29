@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -296,14 +297,52 @@ st.markdown(
         color: #244233;
     }
 
-    /* Navigation Action Bar */
-    .nav-bar {
-        display: flex;
-        justify-content: space-between;
+    /* Crop selection badge & directory styling */
+    .crop-badge-pill {
+        display: inline-flex;
         align-items: center;
-        margin-top: 2rem;
-        padding-top: 1.5rem;
-        border-top: 1px solid var(--border-subtle);
+        gap: 0.4rem;
+        background: #EBF8D3;
+        border: 1px solid rgba(183, 230, 107, 0.6);
+        border-radius: 20px;
+        padding: 0.25rem 0.75rem;
+        font-weight: 700;
+        font-size: 0.82rem;
+        color: #123D2A;
+    }
+    .crop-meta-box {
+        background: #FFFFFF;
+        border: 1px solid rgba(18, 61, 42, 0.12);
+        border-radius: 14px;
+        padding: 1rem 1.25rem;
+        margin-top: 0.6rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    }
+    .pathology-tag {
+        display: inline-block;
+        background: #F1F5EE;
+        color: #1B543A;
+        font-size: 0.78rem;
+        font-weight: 600;
+        padding: 0.2rem 0.55rem;
+        border-radius: 6px;
+        margin: 0.15rem 0.25rem 0.15rem 0;
+        border: 1px solid #DFE7DB;
+    }
+    .prob-bar-container {
+        width: 100%;
+        background-color: #E8ECE6;
+        border-radius: 8px;
+        overflow: hidden;
+        height: 12px;
+        margin-top: 4px;
+        margin-bottom: 10px;
+    }
+    .prob-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #1B543A 0%, #2A7352 70%, #B7E66B 100%);
+        border-radius: 8px;
     }
 
     /* Streamlit Button Restyling */
@@ -353,6 +392,12 @@ if "leaf_image" not in st.session_state:
 if "leaf_result" not in st.session_state:
     st.session_state.leaf_result = None
 
+if "selected_crop_type" not in st.session_state:
+    st.session_state.selected_crop_type = "All Crops (Auto-Detect)"
+
+if "use_tta_boost" not in st.session_state:
+    st.session_state.use_tta_boost = True
+
 if "climate_lat" not in st.session_state:
     st.session_state.climate_lat = 19.0760
 
@@ -372,6 +417,25 @@ def format_metric(value: Optional[float], unit: str = "", precision: int = 1) ->
         return "N/A"
     return f"{value:.{precision}f} {unit}".strip()
 
+
+# Available crop choices with friendly labels and icons
+CROP_OPTIONS = [
+    ("All Crops (Auto-Detect)", "🌱 All Crops (Auto-Detect — 14 Species, 38 Pathologies)"),
+    ("Tomato", "🍅 Tomato (10 Pathologies & Healthy)"),
+    ("Potato", "🥔 Potato (Early/Late Blight & Healthy)"),
+    ("Corn_(maize)", "🌽 Corn / Maize (Rust, Blight, Leaf Spot)"),
+    ("Apple", "🍎 Apple (Scab, Black Rot, Rust & Healthy)"),
+    ("Grape", "🍇 Grape (Black Rot, Esca, Blight & Healthy)"),
+    ("Pepper,_bell", "🫑 Bell Pepper (Bacterial Spot & Healthy)"),
+    ("Strawberry", "🍓 Strawberry (Leaf Scorch & Healthy)"),
+    ("Peach", "🍑 Peach (Bacterial Spot & Healthy)"),
+    ("Cherry_(including_sour)", "🍒 Cherry (Powdery Mildew & Healthy)"),
+    ("Orange", "🍊 Orange (Citrus Greening / Huanglongbing)"),
+    ("Squash", "🎃 Squash (Powdery Mildew)"),
+    ("Soybean", "🫘 Soybean (Healthy Foliage)"),
+    ("Blueberry", "🫐 Blueberry (Healthy Foliage)"),
+    ("Raspberry", "🍇 Raspberry (Healthy Foliage)"),
+]
 
 # ==============================================================================
 # TOP BRANDING & PROGRESS BAR
@@ -454,7 +518,6 @@ if st.session_state.screen == 1:
                 st.rerun()
 
     with hero_col_right:
-        # 3D-inspired realistic botanical visualization with layered depth and lighting
         st.markdown(
             """
             <div class="botanical-3d-card" style="background: linear-gradient(145deg, #184C34 0%, #0F2E20 100%);">
@@ -498,10 +561,10 @@ if st.session_state.screen == 1:
             """
             <div class="feature-card">
                 <div class="feature-icon">🍃</div>
-                <div class="feature-title">Leaf Vision Screening</div>
+                <div class="feature-title">Targeted Crop Screening</div>
                 <div class="feature-body">
-                    Upload high-resolution leaf photographs. Detect visual symptoms across 14 crop species
-                    with calibrated uncertainty handling.
+                    Select your crop species (Tomato, Potato, Corn, Apple, etc.) to isolate known pathologies,
+                    eliminating cross-species confusion and delivering maximum real-time confidence.
                 </div>
             </div>
             """,
@@ -548,20 +611,133 @@ elif st.session_state.screen == 2:
         <div class="surface-card">
             <h3>🍃 Step 2: Optical Leaf Health Screening</h3>
             <p class="card-desc">
-                Upload an uncompressed leaf photograph in bright, uniform lighting. The MobileNetV3-Small neural network
-                will evaluate visual symptom patterns and calculate classification certainty.
+                Select your crop type or use Auto-Detect. Upload an uncompressed leaf photograph or select
+                from curated test samples. The neural model will isolate conditions and calculate calibrated confidence.
             </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
+    # --------------------------------------------------------------------------
+    # CROP SELECTOR BAR & TARGET ISOLATION
+    # --------------------------------------------------------------------------
+    from src.cropcare.image_engine import get_supported_crops, predict_image
+
+    crops_catalog = get_supported_crops()
+
+    st.markdown("#### 🎯 Target Crop Selection")
+    crop_labels = [opt[1] for opt in CROP_OPTIONS]
+    crop_keys = [opt[0] for opt in CROP_OPTIONS]
+
+    curr_idx = 0
+    for idx, (k, _) in enumerate(CROP_OPTIONS):
+        if k == st.session_state.selected_crop_type:
+            curr_idx = idx
+            break
+
+    selected_label = st.selectbox(
+        "Choose Crop Type to isolate diagnosis (or keep Auto-Detect):",
+        options=crop_labels,
+        index=curr_idx,
+        help="Targeting your crop eliminates 28+ irrelevant pathologies from the neural softmax, boosting precision and confidence.",
+    )
+
+    chosen_crop_key = crop_keys[crop_labels.index(selected_label)]
+    if chosen_crop_key != st.session_state.selected_crop_type:
+        st.session_state.selected_crop_type = chosen_crop_key
+        # Re-run inference automatically if an image is already uploaded
+        if st.session_state.leaf_image is not None:
+            filter_arg = None if chosen_crop_key == "All Crops (Auto-Detect)" else chosen_crop_key
+            st.session_state.leaf_result = predict_image(
+                st.session_state.leaf_image,
+                crop_filter=filter_arg,
+                use_tta=st.session_state.use_tta_boost,
+            )
+
+    # Active Crop Metadata Card
+    if chosen_crop_key != "All Crops (Auto-Detect)" and chosen_crop_key in crops_catalog:
+        c_info = crops_catalog[chosen_crop_key]
+        st.markdown(
+            f"""
+            <div class="crop-meta-box">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <div style="font-weight: 700; color: #123D2A; font-size: 1.1rem;">
+                        {c_info['icon']} Targeting: <strong>{c_info['display_name']}</strong>
+                    </div>
+                    <div class="crop-badge-pill">⚡ {len(c_info['diseases'])} Monitored Conditions</div>
+                </div>
+                <div style="font-size: 0.85rem; color: #526E60; margin-bottom: 0.6rem;">
+                    {c_info.get('desc', 'Inference will focus strictly on pathologies affecting this crop.')}
+                </div>
+                <div>
+                    {' '.join([f'<span class="pathology-tag">{d}</span>' for d in c_info['diseases']])}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # --------------------------------------------------------------------------
+    # CROPS & DISEASES ENCYCLOPEDIA EXPANDER
+    # --------------------------------------------------------------------------
+    with st.expander("📚 Browse Monitored Crops & Disease Library (14 Species, 38 Pathologies)", expanded=False):
+        st.caption("CropCare is trained to differentiate among the following conditions across 14 major agricultural crops:")
+        cat_cols = st.columns(2)
+        c_idx = 0
+        for k_raw, meta in sorted(crops_catalog.items(), key=lambda x: x[1]["display_name"]):
+            with cat_cols[c_idx % 2]:
+                st.markdown(
+                    f"""
+                    <div style="background: #FDFEFB; border: 1px solid #DFE7DB; border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 0.75rem;">
+                        <div style="font-weight: 700; color: #123D2A; font-size: 0.98rem;">
+                            {meta['icon']} {meta['display_name']} <span style="font-size: 0.78rem; font-weight: 600; color: #526E60;">({len(meta['diseases'])} conditions)</span>
+                        </div>
+                        <div style="font-size: 0.8rem; color: #2A7352; margin-top: 0.35rem; line-height: 1.4;">
+                            {' • '.join(meta['diseases'])}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            c_idx += 1
+
+    # --------------------------------------------------------------------------
+    # QUICK SAMPLE SELECTOR
+    # --------------------------------------------------------------------------
+    st.markdown("##### ⚡ Quick-Test with Curated Botanical Samples:")
+    sm_c1, sm_c2, sm_c3, sm_c4, sm_c5 = st.columns(5)
+    sample_items = [
+        (sm_c1, "🍅 Tomato Early Blight", "data/sample_leaves/sample_tomato_early_blight.png", "Tomato"),
+        (sm_c2, "🥔 Potato Late Blight", "data/sample_leaves/sample_potato_late_blight.png", "Potato"),
+        (sm_c3, "🌽 Corn Rust", "data/sample_leaves/sample_corn_common_rust.png", "Corn_(maize)"),
+        (sm_c4, "🍎 Apple Scab", "data/sample_leaves/sample_apple_scab.png", "Apple"),
+        (sm_c5, "🌿 Tomato Healthy", "data/sample_leaves/sample_tomato_healthy.png", "Tomato"),
+    ]
+
+    for col, btn_label, file_path, def_crop in sample_items:
+        with col:
+            if st.button(btn_label, use_container_width=True):
+                if os.path.exists(file_path):
+                    loaded_img = Image.open(file_path)
+                    st.session_state.leaf_image = loaded_img
+                    st.session_state.selected_crop_type = def_crop
+                    st.session_state.leaf_result = predict_image(
+                        loaded_img,
+                        crop_filter=def_crop,
+                        use_tta=st.session_state.use_tta_boost,
+                    )
+                    st.rerun()
+
+    # --------------------------------------------------------------------------
+    # MAIN UPLOADER & PREVIEW
+    # --------------------------------------------------------------------------
     leaf_col_left, leaf_col_right = st.columns([1, 1], gap="large")
 
     with leaf_col_left:
         st.markdown("#### 📤 Upload Leaf Photograph")
         uploaded_file = st.file_uploader(
-            "Select leaf image (JPG, JPEG, PNG)",
+            "Upload image (JPG, JPEG, PNG)",
             type=["jpg", "jpeg", "png"],
             help="High-contrast, focused imagery centered on a single leaf produces the most reliable screening.",
         )
@@ -570,30 +746,45 @@ elif st.session_state.screen == 2:
             try:
                 img = Image.open(uploaded_file)
                 st.session_state.leaf_image = img
-                st.image(img, caption="Loaded Leaf Image", use_container_width=True)
             except Exception as e:
                 st.error(f"Image decoding failed: {e}")
 
+        if st.session_state.leaf_image is not None:
+            st.image(st.session_state.leaf_image, caption="Current Leaf Under Analysis", use_container_width=True)
+
+        # Real-Time Accuracy Options
+        st.session_state.use_tta_boost = st.checkbox(
+            "⚡ Multi-Angle Test-Time Augmentation (TTA)",
+            value=st.session_state.use_tta_boost,
+            help="Evaluates original, horizontal flip, and aspect-ratio preserving crops to maximize real-world prediction accuracy.",
+        )
+
         # Run Screening Action
         if st.session_state.leaf_image is not None:
-            if st.button("Run Leaf Screening ⚡", type="primary", use_container_width=True):
+            run_btn_label = f"Run {chosen_crop_key.replace('_', ' ')} Screening ⚡" if chosen_crop_key != "All Crops (Auto-Detect)" else "Run Multi-Crop Screening ⚡"
+            if st.button(run_btn_label, type="primary", use_container_width=True):
                 with st.spinner("Executing neural inference via MobileNetV3..."):
                     try:
-                        from src.cropcare.image_engine import predict_image
-
-                        res = predict_image(st.session_state.leaf_image)
+                        filter_arg = None if st.session_state.selected_crop_type == "All Crops (Auto-Detect)" else st.session_state.selected_crop_type
+                        res = predict_image(
+                            st.session_state.leaf_image,
+                            crop_filter=filter_arg,
+                            use_tta=st.session_state.use_tta_boost,
+                        )
                         st.session_state.leaf_result = res
                     except Exception as inf_err:
                         st.error(f"Inference execution error: {inf_err}")
         else:
-            st.info("Please upload a leaf photograph above to enable diagnostic screening.")
+            st.info("Upload a photograph or click one of the quick test sample buttons above.")
 
+    # --------------------------------------------------------------------------
+    # DIAGNOSTIC OUTPUT
+    # --------------------------------------------------------------------------
     with leaf_col_right:
         st.markdown("#### 🔬 Neural Diagnostic Output")
 
         res = st.session_state.leaf_result
         if res is None:
-            # Model check for honest status
             weights_found = os.path.exists("models/plantvillage_mobilenetv3.pth")
             mapping_found = os.path.exists("models/class_mapping.json")
 
@@ -603,7 +794,7 @@ elif st.session_state.screen == 2:
                     <div style="background: #FFFFFF; border: 2px dashed #CCD7D0; border-radius: 16px; padding: 2.5rem 1.5rem; text-align: center; color: #526E60;">
                         <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">📷</div>
                         <div style="font-weight: 700; color: #123D2A; font-size: 1.1rem; margin-bottom: 0.3rem;">Ready for Inference</div>
-                        <div style="font-size: 0.88rem;">Trained MobileNetV3 checkpoint is online and loaded.<br>Click "Run Leaf Screening" to evaluate image.</div>
+                        <div style="font-size: 0.88rem;">Select a Crop Type or sample leaf, then click "Run Screening" to begin.</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -611,8 +802,7 @@ elif st.session_state.screen == 2:
             else:
                 st.info(
                     "ℹ️ **Inference Engine in Demo Mode**\n\n"
-                    "Model weights or mapping files are missing from the `models/` directory. "
-                    "No disease predictions or artificial scores will be fabricated.",
+                    "Model weights or mapping files are missing from the `models/` directory.",
                     icon="ℹ️",
                 )
         else:
@@ -632,13 +822,23 @@ elif st.session_state.screen == 2:
                 disease = res.get("disease", "Unknown")
                 conf = res.get("confidence", 0.0)
                 uncertain = res.get("uncertain", False)
+                crop_filtered = res.get("crop_filter_applied", False)
+
+                # Visual badge indicating whether diagnosis was isolated or auto-detected
+                if crop_filtered:
+                    mode_badge = f"""<span class="crop-badge-pill" style="margin-bottom: 0.6rem;">🎯 Targeted Crop Mode: {crop}</span>"""
+                else:
+                    det_crop = res.get("detected_crop", crop)
+                    det_conf = res.get("detected_crop_confidence", 0.0) * 100
+                    mode_badge = f"""<span class="crop-badge-pill" style="background: #E8ECE6; color: #1B543A; margin-bottom: 0.6rem;">🔍 Auto-Detected: {det_crop} ({det_conf:.1f}% crop certainty)</span>"""
 
                 st.markdown(
                     f"""
                     <div class="diagnostic-panel">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+                        {mode_badge}
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; margin-top: 0.4rem;">
                             <div>
-                                <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #526E60; letter-spacing: 0.05em;">Target Crop</div>
+                                <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #526E60; letter-spacing: 0.05em;">Crop Species</div>
                                 <div style="font-family: 'Space Grotesk', sans-serif; font-size: 1.6rem; font-weight: 700; color: #123D2A;">{crop}</div>
                             </div>
                             <div style="text-align: right;">
@@ -648,7 +848,7 @@ elif st.session_state.screen == 2:
                         </div>
                         <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #526E60; letter-spacing: 0.05em;">Screened Condition</div>
                         <div style="font-size: 1.25rem; font-weight: 600; color: #1B543A; margin-bottom: 0.8rem;">{disease}</div>
-                        <div style="font-size: 0.75rem; color: #526E60;">Model: <code>{res.get('model_name', 'MobileNetV3-Small-PlantVillage')}</code></div>
+                        <div style="font-size: 0.75rem; color: #526E60;">Model: <code>{res.get('model_name', 'MobileNetV3-Small-PlantVillage')}</code> | TTA: <strong>{'Enabled' if st.session_state.use_tta_boost else 'Disabled'}</strong></div>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -656,30 +856,47 @@ elif st.session_state.screen == 2:
 
                 if uncertain:
                     st.warning(
-                        "⚠️ **Low Confidence / Ambiguous Result:** "
-                        f"Model certainty ({conf*100:.1f}%) is below the reliable threshold (55%). "
-                        "Visual indicators are ambiguous, early-stage, or outside the trained distribution. "
-                        "Field verification by an agronomist is strongly advised.",
+                        f"⚠️ **Low Confidence Result ({conf*100:.1f}%):** "
+                        "Visual indicators are ambiguous or outside laboratory training baseline. "
+                        "Try selecting your exact Crop Type above or testing with an uncluttered background.",
                         icon="⚠️",
                     )
                 else:
-                    st.success("Screening completed with satisfactory model confidence.")
+                    st.success(f"Screening complete: High-confidence visual match ({conf*100:.1f}%).")
 
-                # Top Alternative Probabilities Table
+                # If user used Auto-Detect and had lower confidence, offer 1-click crop focus
+                if not crop_filtered and res.get("detected_crop"):
+                    det_crop_raw = res.get("detected_crop")
+                    if st.button(f"🎯 Sharpen: Isolate Analysis Specifically to {det_crop_raw}", use_container_width=True):
+                        st.session_state.selected_crop_type = det_crop_raw
+                        st.session_state.leaf_result = predict_image(
+                            st.session_state.leaf_image,
+                            crop_filter=det_crop_raw,
+                            use_tta=st.session_state.use_tta_boost,
+                        )
+                        st.rerun()
+
+                # Probability Distribution Bars
                 probs = res.get("probabilities", {})
                 if probs:
-                    with st.expander("📊 View Top Class Probabilities", expanded=False):
-                        top_items = sorted(probs.items(), key=lambda x: x[1], reverse=True)[:5]
-                        prob_table = pd.DataFrame(
-                            [
-                                {
-                                    "Class": k.replace("___", " — ").replace("_", " "),
-                                    "Probability": f"{v*100:.2f}%",
-                                }
-                                for k, v in top_items
-                            ]
-                        )
-                        st.table(prob_table)
+                    with st.expander("📊 View Condition Probability Breakdown", expanded=True):
+                        sorted_probs = sorted(probs.items(), key=lambda x: x[1], reverse=True)
+                        # Show top conditions
+                        for cls_k, p_val in sorted_probs[:6]:
+                            c_display = cls_k.split("___")[-1].replace("_", " ")
+                            pct = p_val * 100
+                            st.markdown(
+                                f"""
+                                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 600; color: #123D2A;">
+                                    <span>{c_display}</span>
+                                    <span>{pct:.1f}%</span>
+                                </div>
+                                <div class="prob-bar-container">
+                                    <div class="prob-bar-fill" style="width: {pct:.1f}%;"></div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
 
                 st.markdown(
                     """
@@ -896,24 +1113,29 @@ elif st.session_state.screen == 4:
             disease = leaf_res.get("disease", "Unknown")
             conf = leaf_res.get("confidence", 0.0)
             uncert = leaf_res.get("uncertain", False)
+            crop_filtered = leaf_res.get("crop_filter_applied", False)
+
+            mode_label = "Targeted Crop Focus" if crop_filtered else "Multi-Crop Auto-Detect"
 
             st.markdown(
                 f"""
                 <div class="diagnostic-panel">
-                    <div style="font-size: 0.8rem; font-weight: 700; color: #526E60; text-transform: uppercase;">Crop Identified</div>
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #526E60; text-transform: uppercase;">Screening Mode</div>
+                    <div style="font-size: 0.95rem; font-weight: 700; color: #1B543A; margin-bottom: 0.6rem;">{mode_label}</div>
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #526E60; text-transform: uppercase;">Crop Identified</div>
                     <div style="font-size: 1.35rem; font-weight: 700; color: #123D2A; margin-bottom: 0.6rem;">{crop}</div>
-                    <div style="font-size: 0.8rem; font-weight: 700; color: #526E60; text-transform: uppercase;">Visual Condition</div>
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #526E60; text-transform: uppercase;">Visual Condition</div>
                     <div style="font-size: 1.15rem; font-weight: 600; color: #1B543A; margin-bottom: 0.6rem;">{disease}</div>
-                    <div style="font-size: 0.8rem; font-weight: 700; color: #526E60; text-transform: uppercase;">Confidence Score</div>
-                    <div style="font-size: 1.15rem; font-weight: 700; color: #123D2A;">{conf*100:.1f}%</div>
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #526E60; text-transform: uppercase;">Confidence Score</div>
+                    <div style="font-size: 1.25rem; font-weight: 700; color: #123D2A;">{conf*100:.1f}%</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
             if uncert:
-                st.warning("Flagged: Ambiguous / Low Confidence Screening")
+                st.warning("Flagged: Ambiguous / Low Confidence Screening. Field verification advised.")
             else:
-                st.success("Flagged: Reliable Optical Confidence")
+                st.success("Flagged: High Optical Confidence Diagnosis")
         else:
             st.info("No leaf screening was completed in this session.")
 
@@ -980,4 +1202,5 @@ elif st.session_state.screen == 4:
             st.session_state.leaf_image = None
             st.session_state.leaf_result = None
             st.session_state.climate_result = None
+            st.session_state.selected_crop_type = "All Crops (Auto-Detect)"
             st.rerun()

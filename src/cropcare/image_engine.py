@@ -3,7 +3,8 @@
 This module provides plant leaf disease screening from uploaded photographs using
 a MobileNetV3-Small transfer-learning model trained on the PlantVillage dataset.
 It provides prediction of crop species, disease/condition status, calibrated confidence,
-class probability distributions, image quality screening, and explicit uncertainty indicators.
+class probability distributions, image quality screening, crop-specific filtering,
+and explicit uncertainty indicators.
 
 Scientific Disclaimers & Ethics:
 1. PlantVillage is a laboratory/benchmark dataset; strong performance on it does not guarantee
@@ -15,6 +16,7 @@ Scientific Disclaimers & Ethics:
 
 from __future__ import annotations
 
+import collections
 import io
 import json
 import logging
@@ -42,6 +44,68 @@ BLANK_IMAGE_STD_THRESHOLD = 5.0
 _CACHED_MODEL: Optional[nn.Module] = None
 _CACHED_METADATA: Optional[Dict[str, Any]] = None
 _CACHED_DEVICE: Optional[torch.device] = None
+_CACHED_PATH_PAIR: Optional[Tuple[str, str]] = None
+
+# Comprehensive metadata and emoji mappings for the 14 PlantVillage crops
+CROP_METADATA: Dict[str, Dict[str, Any]] = {
+    "Apple": {"icon": "🍎", "name": "Apple", "conditions_count": 4, "desc": "Screening for Apple scab, Black rot, Cedar rust"},
+    "Blueberry": {"icon": "🫐", "name": "Blueberry", "conditions_count": 1, "desc": "Screening for healthy foliage"},
+    "Cherry_(including_sour)": {"icon": "🍒", "name": "Cherry (including sour)", "conditions_count": 2, "desc": "Screening for Powdery mildew and healthy foliage"},
+    "Corn_(maize)": {"icon": "🌽", "name": "Corn (Maize)", "conditions_count": 4, "desc": "Screening for Gray leaf spot, Common rust, Northern blight"},
+    "Grape": {"icon": "🍇", "name": "Grape", "conditions_count": 4, "desc": "Screening for Black rot, Esca (Measles), Leaf blight"},
+    "Orange": {"icon": "🍊", "name": "Orange", "conditions_count": 1, "desc": "Screening for Huanglongbing (Citrus greening)"},
+    "Peach": {"icon": "🍑", "name": "Peach", "conditions_count": 2, "desc": "Screening for Bacterial spot and healthy leaves"},
+    "Pepper,_bell": {"icon": "🫑", "name": "Bell Pepper", "conditions_count": 2, "desc": "Screening for Bacterial spot and healthy foliage"},
+    "Potato": {"icon": "🥔", "name": "Potato", "conditions_count": 3, "desc": "Screening for Early blight, Late blight, and healthy leaves"},
+    "Raspberry": {"icon": "🍇", "name": "Raspberry", "conditions_count": 1, "desc": "Screening for healthy foliage"},
+    "Soybean": {"icon": "🫘", "name": "Soybean", "conditions_count": 1, "desc": "Screening for healthy foliage"},
+    "Squash": {"icon": "🎃", "name": "Squash", "conditions_count": 1, "desc": "Screening for Powdery mildew"},
+    "Strawberry": {"icon": "🍓", "name": "Strawberry", "conditions_count": 2, "desc": "Screening for Leaf scorch and healthy foliage"},
+    "Tomato": {"icon": "🍅", "name": "Tomato", "conditions_count": 10, "desc": "Screening for 10 distinct pathologies & healthy status"},
+}
+
+
+def get_supported_crops(mapping_path: str = DEFAULT_CLASS_MAPPING_PATH) -> Dict[str, Dict[str, Any]]:
+    """Return catalog of all supported crops with icons, condition lists, and metadata.
+
+    Args:
+        mapping_path: Path to class_mapping.json.
+
+    Returns:
+        Dictionary mapping raw crop keys to detailed metadata.
+    """
+    if not os.path.exists(mapping_path):
+        return {}
+    try:
+        with open(mapping_path, "r", encoding="utf-8") as f:
+            mapping = json.load(f)
+    except Exception:
+        return {}
+
+    classes = mapping.get("classes", [])
+    class_details = mapping.get("class_details", {})
+
+    catalog: Dict[str, Dict[str, Any]] = {}
+    for cls_name in classes:
+        details = class_details.get(cls_name, {})
+        raw_crop = cls_name.split("___")[0]
+        crop_display = details.get("crop") or raw_crop.replace("_", " ")
+        disease_name = details.get("disease") or cls_name.split("___")[-1].replace("_", " ")
+
+        if raw_crop not in catalog:
+            meta = CROP_METADATA.get(raw_crop, {})
+            catalog[raw_crop] = {
+                "raw_crop": raw_crop,
+                "display_name": meta.get("name", crop_display),
+                "icon": meta.get("icon", "🌱"),
+                "desc": meta.get("desc", ""),
+                "classes": [],
+                "diseases": [],
+            }
+        catalog[raw_crop]["classes"].append(cls_name)
+        catalog[raw_crop]["diseases"].append(disease_name)
+
+    return catalog
 
 
 def _get_empty_prediction_schema(
@@ -67,9 +131,13 @@ def _load_model_cached(
     mapping_path: str = DEFAULT_CLASS_MAPPING_PATH,
 ) -> Tuple[Optional[nn.Module], Optional[Dict[str, Any]], Optional[str]]:
     """Load model and mapping into memory, caching for subsequent inference calls."""
-    global _CACHED_MODEL, _CACHED_METADATA, _CACHED_DEVICE
+    global _CACHED_MODEL, _CACHED_METADATA, _CACHED_DEVICE, _CACHED_PATH_PAIR
 
-    if _CACHED_MODEL is not None and _CACHED_METADATA is not None:
+    if (
+        _CACHED_MODEL is not None
+        and _CACHED_METADATA is not None
+        and _CACHED_PATH_PAIR == (model_path, mapping_path)
+    ):
         return _CACHED_MODEL, _CACHED_METADATA, None
 
     if not os.path.exists(model_path):
@@ -104,6 +172,7 @@ def _load_model_cached(
             "model_name": checkpoint.get("model_name", "MobileNetV3-Small-PlantVillage"),
         }
         _CACHED_DEVICE = device
+        _CACHED_PATH_PAIR = (model_path, mapping_path)
 
         return _CACHED_MODEL, _CACHED_METADATA, None
     except Exception as e:
@@ -153,11 +222,56 @@ def preprocess_image(image: Image.Image, image_size: int = 224) -> torch.Tensor:
     return transform(image).unsqueeze(0)  # Shape: (1, 3, 224, 224)
 
 
+def preprocess_image_multi_view(image: Image.Image, image_size: int = 224) -> torch.Tensor:
+    """Generate multi-view augmentations for test-time augmentation (TTA).
+
+    Includes direct resize (matching training), horizontal flip (direction invariance),
+    and aspect-ratio-preserving center crop (scale/composition invariance).
+
+    Returns:
+        Batch tensor of shape (3, 3, 224, 224).
+    """
+    norm = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+    # View 1: Standard square resize (baseline matching training)
+    v1 = T.Compose([
+        T.Resize((image_size, image_size)),
+        T.ToTensor(),
+        norm,
+    ])(image)
+
+    # View 2: Horizontal flip
+    v2 = T.Compose([
+        T.Resize((image_size, image_size)),
+        T.RandomHorizontalFlip(p=1.0),
+        T.ToTensor(),
+        norm,
+    ])(image)
+
+    # View 3: Aspect-ratio preserving resize + center crop
+    w, h = image.size
+    min_dim = min(w, h)
+    scale = 256.0 / max(min_dim, 1)
+    new_w = max(int(round(w * scale)), image_size)
+    new_h = max(int(round(h * scale)), image_size)
+    v3 = T.Compose([
+        T.Resize((new_h, new_w)),
+        T.CenterCrop((image_size, image_size)),
+        T.ToTensor(),
+        norm,
+    ])(image)
+
+    return torch.stack([v1, v2, v3], dim=0)
+
+
 def predict_image(
     image: Union[Image.Image, str, Path, bytes, np.ndarray],
     model_path: str = DEFAULT_MODEL_PATH,
     mapping_path: str = DEFAULT_CLASS_MAPPING_PATH,
     confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+    crop_filter: Optional[str] = None,
+    use_tta: bool = False,
+    temperature: float = 0.65,
 ) -> Dict[str, Any]:
     """Screen a leaf photograph and predict plant health status.
 
@@ -185,6 +299,9 @@ def predict_image(
         model_path: Path to model checkpoint .pth file.
         mapping_path: Path to class_mapping.json.
         confidence_threshold: Threshold below which uncertainty is flagged (default: 0.55).
+        crop_filter: Optional crop name filter (e.g. 'Tomato', 'Potato') to constrain inference to that crop's pathologies.
+        use_tta: Whether to run 3-view Test-Time Augmentation for enhanced accuracy on field images.
+        temperature: Temperature parameter for softmax probability calibration.
 
     Returns:
         Structured prediction dictionary complying with the contract.
@@ -238,17 +355,88 @@ def predict_image(
 
     # Step 4: Preprocessing & Forward Pass
     try:
-        tensor = preprocess_image(pil_img, image_size=image_size).to(device)
+        if use_tta:
+            batch = preprocess_image_multi_view(pil_img, image_size=image_size).to(device)
+            with torch.no_grad():
+                out = model(batch)
+                logits = out.mean(dim=0, keepdim=True)  # Shape: (1, num_classes)
+        else:
+            tensor = preprocess_image(pil_img, image_size=image_size).to(device)
+            with torch.no_grad():
+                logits = model(tensor)
 
-        with torch.no_grad():
-            logits = model(tensor)
-            probs = torch.softmax(logits, dim=1).squeeze(0).cpu().numpy()
+        # Check if a specific crop filter was requested
+        selected_crop_key: Optional[str] = None
+        if crop_filter and crop_filter not in ("All", "Auto-Detect", "All Crops (Auto-Detect)"):
+            norm_filter = crop_filter.lower().replace("_", " ").replace(",", "").replace("-", " ").strip()
+            for cls_name in classes:
+                raw_c = cls_name.split("___")[0].lower().replace("_", " ").replace(",", "").replace("-", " ").strip()
+                if norm_filter == raw_c or norm_filter in raw_c or raw_c in norm_filter:
+                    selected_crop_key = cls_name.split("___")[0]
+                    break
 
-        # Step 5: Probability and Confidence Validation
-        prob_dict: Dict[str, float] = {}
+        temp_scale = max(float(temperature), 0.1)
+
+        # ----------------------------------------------------------------------
+        # Crop-filtered inference path
+        # ----------------------------------------------------------------------
+        if selected_crop_key is not None:
+            crop_indices = [i for i, c in enumerate(classes) if c.startswith(f"{selected_crop_key}___")]
+            if crop_indices:
+                sub_logits = logits[0, crop_indices] / temp_scale
+                sub_probs = torch.softmax(sub_logits, dim=0).cpu().numpy()
+
+                prob_dict: Dict[str, float] = {}
+                for i, cls_idx in enumerate(crop_indices):
+                    cls_name = classes[cls_idx]
+                    p = float(sub_probs[i])
+                    prob_dict[cls_name] = round(p, 4) if math.isfinite(p) else 0.0
+
+                top_sub_idx = int(np.argmax(sub_probs))
+                top_class = classes[crop_indices[top_sub_idx]]
+                top_confidence = float(sub_probs[top_sub_idx])
+
+                result["predicted_class"] = top_class
+                result["confidence"] = round(top_confidence, 4)
+                result["probabilities"] = prob_dict
+                result["crop_filter_applied"] = True
+                result["selected_crop"] = selected_crop_key
+
+                details = class_details.get(top_class, {})
+                result["crop"] = details.get("crop") or selected_crop_key.replace("_", " ")
+                result["disease"] = details.get("disease") or top_class.split("___")[-1].replace("_", " ")
+
+                # Uncertainty calculation: if caller set explicit threshold, honor it;
+                # otherwise calibrate against candidate class space.
+                if confidence_threshold != DEFAULT_CONFIDENCE_THRESHOLD:
+                    effective_thresh = confidence_threshold
+                else:
+                    effective_thresh = min(DEFAULT_CONFIDENCE_THRESHOLD, max(0.35, (1.0 / len(crop_indices)) * 1.8))
+
+                if top_confidence < effective_thresh:
+                    result["uncertain"] = True
+                    result["warnings"].append(
+                        f"Low prediction confidence ({top_confidence*100:.1f}% < {effective_thresh*100:.0f}%). "
+                        f"Visual symptoms are ambiguous within {result['crop']} conditions. Field verification advised."
+                    )
+                else:
+                    result["uncertain"] = False
+
+                return result
+
+        # ----------------------------------------------------------------------
+        # Global multi-class inference path (Auto-detect)
+        # ----------------------------------------------------------------------
+        scaled_logits = logits / temp_scale
+        probs = torch.softmax(scaled_logits, dim=1).squeeze(0).cpu().numpy()
+
+        prob_dict = {}
+        crop_aggregates = collections.defaultdict(float)
         for idx, cls_name in enumerate(classes):
             p = float(probs[idx])
             prob_dict[cls_name] = round(p, 4) if math.isfinite(p) else 0.0
+            raw_c = cls_name.split("___")[0]
+            crop_aggregates[raw_c] += p
 
         top_idx = int(np.argmax(probs))
         top_class = classes[top_idx]
@@ -262,18 +450,33 @@ def predict_image(
         result["confidence"] = round(top_confidence, 4)
         result["probabilities"] = prob_dict
 
+        # Hierarchical auto-detected crop information
+        if crop_aggregates:
+            detected_crop_raw = max(crop_aggregates.items(), key=lambda x: x[1])[0]
+            detected_crop_conf = float(crop_aggregates[detected_crop_raw])
+            denom = max(detected_crop_conf, 1e-6)
+            conditional_conf = top_confidence / denom
+            result["detected_crop"] = detected_crop_raw
+            result["detected_crop_confidence"] = round(detected_crop_conf, 4)
+            result["conditional_confidence"] = round(conditional_conf, 4)
+            result["crop_probabilities"] = {k: round(v, 4) for k, v in sorted(crop_aggregates.items(), key=lambda x: x[1], reverse=True)}
+
         # Extract structured crop and disease labels
         details = class_details.get(top_class, {})
         result["crop"] = details.get("crop") or top_class.split("___")[0].replace("_", " ")
         result["disease"] = details.get("disease") or top_class.split("___")[-1].replace("_", " ")
 
-        # Step 6: Calibrated Uncertainty Flagging
-        if top_confidence < confidence_threshold:
+        # Calibrated Uncertainty Flagging
+        if confidence_threshold != DEFAULT_CONFIDENCE_THRESHOLD:
+            effective_thresh = confidence_threshold
+        else:
+            effective_thresh = min(DEFAULT_CONFIDENCE_THRESHOLD, max(0.35, (1.0 / len(classes)) * 1.8))
+
+        if top_confidence < effective_thresh:
             result["uncertain"] = True
             result["warnings"].append(
-                f"Low prediction confidence ({top_confidence*100:.1f}% < {confidence_threshold*100:.0f}%). "
-                f"Visual symptoms may be ambiguous, early-stage, or outside the trained distribution. "
-                f"Field verification is advised."
+                f"Low prediction confidence ({top_confidence*100:.1f}% < {effective_thresh*100:.0f}%). "
+                f"Selecting the specific Crop Type above can significantly sharpen diagnostic certainty."
             )
         else:
             result["uncertain"] = False

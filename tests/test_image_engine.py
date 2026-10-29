@@ -18,6 +18,7 @@ import torch.nn as nn
 from src.cropcare.image_engine import (
     DEFAULT_CONFIDENCE_THRESHOLD,
     check_image_quality,
+    get_supported_crops,
     predict_image,
     preprocess_image,
 )
@@ -191,6 +192,39 @@ class TestImageEngineOffline(unittest.TestCase):
             confidence_threshold=0.01,
         )
         self.assertFalse(res_low_thresh["uncertain"])
+
+    def test_crop_filter_and_supported_crops(self):
+        """Verify crop filtering restricts classes and normalizes probabilities for that crop."""
+        catalog = get_supported_crops("models/class_mapping.json")
+        self.assertIn("Tomato", catalog)
+        self.assertEqual(len(catalog["Tomato"]["classes"]), 10)
+        self.assertEqual(catalog["Tomato"]["icon"], "🍅")
+
+        # Test inference with crop filter on the 3-class test mapping
+        leaf_img = Image.new("RGB", (224, 224), color=(80, 160, 90))
+        res_apple = predict_image(
+            leaf_img,
+            model_path=self.dummy_model_path,
+            mapping_path=self.dummy_mapping_path,
+            crop_filter="Apple",
+        )
+        self.assertTrue(res_apple.get("crop_filter_applied"))
+        self.assertEqual(res_apple["crop"], "Apple")
+        self.assertEqual(len(res_apple["probabilities"]), 2)
+        self.assertAlmostEqual(sum(res_apple["probabilities"].values()), 1.0, places=2)
+
+    def test_multi_view_tta_inference(self):
+        """Verify Test-Time Augmentation (TTA) multi-view forward pass runs cleanly."""
+        np_arr = np.random.randint(40, 210, (300, 400, 3), dtype=np.uint8)
+        leaf_img = Image.fromarray(np_arr)
+        res_tta = predict_image(
+            leaf_img,
+            model_path=self.dummy_model_path,
+            mapping_path=self.dummy_mapping_path,
+            use_tta=True,
+        )
+        self.assertIsNotNone(res_tta["predicted_class"])
+        self.assertTrue(0.0 <= res_tta["confidence"] <= 1.0)
 
 
 if __name__ == "__main__":
