@@ -3,9 +3,13 @@
 from src.cropcare.image_engine import (
     CROP_METADATA,
     check_image_quality,
+    extract_leaf_embedding,
+    get_registered_field_leaves,
     get_supported_crops,
     predict_image,
     preprocess_image,
+    query_field_memory,
+    register_field_leaf,
 )
 
 try:
@@ -18,7 +22,10 @@ __all__ = [
     "get_supported_crops",
     "check_image_quality",
     "preprocess_image",
+    "extract_leaf_embedding",
+    "register_field_leaf",
+    "query_field_memory",
+    "get_registered_field_leaves",
     "CROP_METADATA",
     "get_environment",
 ]
-

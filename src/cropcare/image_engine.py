@@ -4,7 +4,7 @@ This module provides plant leaf disease screening from uploaded photographs usin
 a MobileNetV3-Small transfer-learning model trained on the PlantVillage dataset.
 It provides prediction of crop species, disease/condition status, calibrated confidence,
 class probability distributions, image quality screening, crop-specific filtering,
-and explicit uncertainty indicators.
+active learning field memory adaptation, and explicit uncertainty indicators.
 
 Scientific Disclaimers & Ethics:
 1. PlantVillage is a laboratory/benchmark dataset; strong performance on it does not guarantee
@@ -17,6 +17,7 @@ Scientific Disclaimers & Ethics:
 from __future__ import annotations
 
 import collections
+import datetime
 import io
 import json
 import logging
@@ -24,6 +25,7 @@ import math
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
+import uuid
 
 import numpy as np
 from PIL import Image
@@ -39,6 +41,10 @@ DEFAULT_CLASS_MAPPING_PATH = "models/class_mapping.json"
 DEFAULT_CONFIDENCE_THRESHOLD = 0.55  # Below this threshold, mark prediction as uncertain
 MIN_IMAGE_DIMENSION = 32
 BLANK_IMAGE_STD_THRESHOLD = 5.0
+
+# Active learning field memory bank paths
+DEFAULT_FIELD_MEMORY_PATH = "data/active_learning_memory.json"
+DEFAULT_FIELD_UPLOADS_DIR = "data/field_uploads"
 
 # Singleton cache for loaded model and class mapping
 _CACHED_MODEL: Optional[nn.Module] = None
@@ -66,14 +72,7 @@ CROP_METADATA: Dict[str, Dict[str, Any]] = {
 
 
 def get_supported_crops(mapping_path: str = DEFAULT_CLASS_MAPPING_PATH) -> Dict[str, Dict[str, Any]]:
-    """Return catalog of all supported crops with icons, condition lists, and metadata.
-
-    Args:
-        mapping_path: Path to class_mapping.json.
-
-    Returns:
-        Dictionary mapping raw crop keys to detailed metadata.
-    """
+    """Return catalog of all supported crops with icons, condition lists, and metadata."""
     if not os.path.exists(mapping_path):
         return {}
     try:
@@ -180,14 +179,7 @@ def _load_model_cached(
 
 
 def check_image_quality(image: Image.Image) -> List[str]:
-    """Perform input image sanity checks (dimensions, blankness, contrast).
-
-    Args:
-        image: Decoded PIL image.
-
-    Returns:
-        List of warning strings. Empty list indicates good visual sanity.
-    """
+    """Perform input image sanity checks (dimensions, blankness, contrast)."""
     warnings: List[str] = []
 
     width, height = image.size
@@ -196,7 +188,6 @@ def check_image_quality(image: Image.Image) -> List[str]:
             f"Image dimensions ({width}x{height}) are extremely small. Disease symptoms may lack recognizable resolution."
         )
 
-    # Check for blank / solid-color image
     try:
         arr = np.array(image.convert("L"))
         std_val = float(np.std(arr))
@@ -223,24 +214,15 @@ def preprocess_image(image: Image.Image, image_size: int = 224) -> torch.Tensor:
 
 
 def preprocess_image_multi_view(image: Image.Image, image_size: int = 224) -> torch.Tensor:
-    """Generate multi-view augmentations for test-time augmentation (TTA).
-
-    Includes direct resize (matching training), horizontal flip (direction invariance),
-    and aspect-ratio-preserving center crop (scale/composition invariance).
-
-    Returns:
-        Batch tensor of shape (3, 3, 224, 224).
-    """
+    """Generate multi-view augmentations for test-time augmentation (TTA)."""
     norm = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-    # View 1: Standard square resize (baseline matching training)
     v1 = T.Compose([
         T.Resize((image_size, image_size)),
         T.ToTensor(),
         norm,
     ])(image)
 
-    # View 2: Horizontal flip
     v2 = T.Compose([
         T.Resize((image_size, image_size)),
         T.RandomHorizontalFlip(p=1.0),
@@ -248,7 +230,6 @@ def preprocess_image_multi_view(image: Image.Image, image_size: int = 224) -> to
         norm,
     ])(image)
 
-    # View 3: Aspect-ratio preserving resize + center crop
     w, h = image.size
     min_dim = min(w, h)
     scale = 256.0 / max(min_dim, 1)
@@ -264,6 +245,144 @@ def preprocess_image_multi_view(image: Image.Image, image_size: int = 224) -> to
     return torch.stack([v1, v2, v3], dim=0)
 
 
+# ==============================================================================
+# CONTINUAL LEARNING & ACTIVE FIELD MEMORY BANK
+# ==============================================================================
+def extract_leaf_embedding(
+    image: Image.Image,
+    model_path: str = DEFAULT_MODEL_PATH,
+    mapping_path: str = DEFAULT_CLASS_MAPPING_PATH,
+) -> Optional[List[float]]:
+    """Extract a 1024-dimensional normalized feature embedding vector from MobileNetV3."""
+    model, metadata, err = _load_model_cached(model_path=model_path, mapping_path=mapping_path)
+    if err or model is None:
+        return None
+
+    try:
+        device = _CACHED_DEVICE or torch.device("cpu")
+        tensor = preprocess_image(image.convert("RGB"), image_size=224).to(device)
+        with torch.no_grad():
+            x = model.features(tensor)
+            x = model.avgpool(x)
+            x = torch.flatten(x, 1)
+            feat = model.classifier[0](x)
+            feat = model.classifier[1](feat)
+            norm_feat = torch.nn.functional.normalize(feat, p=2, dim=1)
+        return norm_feat.squeeze(0).cpu().numpy().tolist()
+    except Exception as e:
+        logger.error(f"Failed to extract leaf embedding: {e}")
+        return None
+
+
+def register_field_leaf(
+    image: Image.Image,
+    crop: str,
+    disease: str,
+    notes: str = "",
+    memory_path: str = DEFAULT_FIELD_MEMORY_PATH,
+    uploads_dir: str = DEFAULT_FIELD_UPLOADS_DIR,
+    model_path: str = DEFAULT_MODEL_PATH,
+    mapping_path: str = DEFAULT_CLASS_MAPPING_PATH,
+) -> Dict[str, Any]:
+    """Register a new leaf observation into the continual-learning memory bank."""
+    os.makedirs(uploads_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(memory_path) or ".", exist_ok=True)
+
+    embedding = extract_leaf_embedding(image, model_path=model_path, mapping_path=mapping_path)
+    if embedding is None:
+        return {"success": False, "error": "Neural embedding extraction failed."}
+
+    sample_id = f"sample_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+    filename = f"{sample_id}.png"
+    filepath = os.path.join(uploads_dir, filename)
+
+    try:
+        image.convert("RGB").save(filepath, format="PNG")
+    except Exception as e:
+        return {"success": False, "error": f"Failed to save image: {e}"}
+
+    record = {
+        "id": sample_id,
+        "crop": crop.strip(),
+        "disease": disease.strip(),
+        "notes": notes.strip(),
+        "timestamp": datetime.datetime.now().isoformat(),
+        "image_path": filepath,
+        "embedding": embedding,
+    }
+
+    records = []
+    if os.path.exists(memory_path):
+        try:
+            with open(memory_path, "r", encoding="utf-8") as f:
+                records = json.load(f)
+        except Exception:
+            records = []
+
+    records.append(record)
+    with open(memory_path, "w", encoding="utf-8") as f:
+        json.dump(records, f, indent=2)
+
+    return {"success": True, "record": record, "total_samples": len(records)}
+
+
+def query_field_memory(
+    embedding: List[float],
+    memory_path: str = DEFAULT_FIELD_MEMORY_PATH,
+    similarity_threshold: float = 0.82,
+) -> Optional[Dict[str, Any]]:
+    """Query field memory bank using cosine similarity against registered embeddings."""
+    if not os.path.exists(memory_path):
+        return None
+
+    try:
+        with open(memory_path, "r", encoding="utf-8") as f:
+            records = json.load(f)
+    except Exception:
+        return None
+
+    if not records:
+        return None
+
+    emb_arr = np.array(embedding, dtype=np.float32)
+    best_match = None
+    best_sim = -1.0
+
+    for rec in records:
+        rec_emb = rec.get("embedding")
+        if not rec_emb:
+            continue
+        rec_arr = np.array(rec_emb, dtype=np.float32)
+        sim = float(np.dot(emb_arr, rec_arr))
+        if sim > best_sim:
+            best_sim = sim
+            best_match = {
+                "id": rec.get("id"),
+                "crop": rec.get("crop"),
+                "disease": rec.get("disease"),
+                "notes": rec.get("notes"),
+                "similarity": round(sim, 4),
+                "timestamp": rec.get("timestamp"),
+                "image_path": rec.get("image_path"),
+            }
+
+    if best_match and best_sim >= similarity_threshold:
+        return best_match
+
+    return None
+
+
+def get_registered_field_leaves(memory_path: str = DEFAULT_FIELD_MEMORY_PATH) -> List[Dict[str, Any]]:
+    """Return all registered field observations from the active learning memory bank."""
+    if not os.path.exists(memory_path):
+        return []
+    try:
+        with open(memory_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
 def predict_image(
     image: Union[Image.Image, str, Path, bytes, np.ndarray],
     model_path: str = DEFAULT_MODEL_PATH,
@@ -275,36 +394,17 @@ def predict_image(
 ) -> Dict[str, Any]:
     """Screen a leaf photograph and predict plant health status.
 
-    This is the primary public interface for the Leaf Image Intelligence Module.
-    It guarantees a stable dictionary output schema and will never raise uncaught
-    exceptions on bad images or missing checkpoints.
-
     Output Contract:
     {
         "predicted_class": "Tomato___Early_blight",
         "crop": "Tomato",
         "disease": "Early blight",
         "confidence": 0.874,
-        "probabilities": {
-            "Tomato___Early_blight": 0.874,
-            ...
-        },
+        "probabilities": { ... },
         "uncertain": False,
         "model_name": "MobileNetV3-Small-PlantVillage",
         "warnings": []
     }
-
-    Args:
-        image: Leaf image represented as PIL Image, file path string/Path, raw bytes, or numpy array.
-        model_path: Path to model checkpoint .pth file.
-        mapping_path: Path to class_mapping.json.
-        confidence_threshold: Threshold below which uncertainty is flagged (default: 0.55).
-        crop_filter: Optional crop name filter (e.g. 'Tomato', 'Potato') to constrain inference to that crop's pathologies.
-        use_tta: Whether to run 3-view Test-Time Augmentation for enhanced accuracy on field images.
-        temperature: Temperature parameter for softmax probability calibration.
-
-    Returns:
-        Structured prediction dictionary complying with the contract.
     """
     result = _get_empty_prediction_schema()
 
@@ -359,7 +459,7 @@ def predict_image(
             batch = preprocess_image_multi_view(pil_img, image_size=image_size).to(device)
             with torch.no_grad():
                 out = model(batch)
-                logits = out.mean(dim=0, keepdim=True)  # Shape: (1, num_classes)
+                logits = out.mean(dim=0, keepdim=True)
         else:
             tensor = preprocess_image(pil_img, image_size=image_size).to(device)
             with torch.no_grad():
@@ -406,8 +506,6 @@ def predict_image(
                 result["crop"] = details.get("crop") or selected_crop_key.replace("_", " ")
                 result["disease"] = details.get("disease") or top_class.split("___")[-1].replace("_", " ")
 
-                # Uncertainty calculation: if caller set explicit threshold, honor it;
-                # otherwise calibrate against candidate class space.
                 if confidence_threshold != DEFAULT_CONFIDENCE_THRESHOLD:
                     effective_thresh = confidence_threshold
                 else:
@@ -421,6 +519,21 @@ def predict_image(
                     )
                 else:
                     result["uncertain"] = False
+
+                # Query active field memory for agronomist confirmation
+                try:
+                    q_emb = extract_leaf_embedding(pil_img, model_path=model_path, mapping_path=mapping_path)
+                    if q_emb is not None:
+                        mem_match = query_field_memory(q_emb, similarity_threshold=0.82)
+                        if mem_match:
+                            result["field_memory_match"] = mem_match
+                            if mem_match["similarity"] >= 0.88:
+                                result["crop"] = mem_match["crop"]
+                                result["disease"] = mem_match["disease"]
+                                result["confidence"] = max(result["confidence"], mem_match["similarity"])
+                                result["uncertain"] = False
+                except Exception:
+                    pass
 
                 return result
 
@@ -450,7 +563,6 @@ def predict_image(
         result["confidence"] = round(top_confidence, 4)
         result["probabilities"] = prob_dict
 
-        # Hierarchical auto-detected crop information
         if crop_aggregates:
             detected_crop_raw = max(crop_aggregates.items(), key=lambda x: x[1])[0]
             detected_crop_conf = float(crop_aggregates[detected_crop_raw])
@@ -461,12 +573,10 @@ def predict_image(
             result["conditional_confidence"] = round(conditional_conf, 4)
             result["crop_probabilities"] = {k: round(v, 4) for k, v in sorted(crop_aggregates.items(), key=lambda x: x[1], reverse=True)}
 
-        # Extract structured crop and disease labels
         details = class_details.get(top_class, {})
         result["crop"] = details.get("crop") or top_class.split("___")[0].replace("_", " ")
         result["disease"] = details.get("disease") or top_class.split("___")[-1].replace("_", " ")
 
-        # Calibrated Uncertainty Flagging
         if confidence_threshold != DEFAULT_CONFIDENCE_THRESHOLD:
             effective_thresh = confidence_threshold
         else:
@@ -480,6 +590,21 @@ def predict_image(
             )
         else:
             result["uncertain"] = False
+
+        # Query active field memory for agronomist confirmation
+        try:
+            q_emb = extract_leaf_embedding(pil_img, model_path=model_path, mapping_path=mapping_path)
+            if q_emb is not None:
+                mem_match = query_field_memory(q_emb, similarity_threshold=0.82)
+                if mem_match:
+                    result["field_memory_match"] = mem_match
+                    if mem_match["similarity"] >= 0.88:
+                        result["crop"] = mem_match["crop"]
+                        result["disease"] = mem_match["disease"]
+                        result["confidence"] = max(result["confidence"], mem_match["similarity"])
+                        result["uncertain"] = False
+        except Exception:
+            pass
 
     except Exception as e:
         logger.exception("Inference error in predict_image")
