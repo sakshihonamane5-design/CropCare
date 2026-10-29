@@ -6,8 +6,10 @@ leaf screening and hyper-local environmental intelligence.
 
 from __future__ import annotations
 
+import base64
 import io
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -195,7 +197,7 @@ st.markdown(
         margin-bottom: 2rem;
     }
 
-    /* 3D Botanical Visual Graphic */
+    /* 3D Botanical Visual Graphic & Farmer Hero Card */
     .botanical-3d-card {
         background: rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(12px);
@@ -211,6 +213,75 @@ st.markdown(
         font-weight: 600;
         color: var(--lime-accent);
         margin-top: 0.6rem;
+    }
+
+    .farmer-hero-card {
+        background: linear-gradient(145deg, #184C34 0%, #0F2E20 100%);
+        border: 1px solid rgba(183, 230, 107, 0.25);
+        border-radius: 24px;
+        padding: 1.25rem;
+        box-shadow: var(--shadow-hero);
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .farmer-hero-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 24px 50px -8px rgba(18, 61, 42, 0.45);
+    }
+    .farmer-img-frame {
+        position: relative;
+        width: 100%;
+        border-radius: 18px;
+        overflow: hidden;
+        aspect-ratio: 4/3;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+    .farmer-hero-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        transition: transform 0.4s ease;
+    }
+    .farmer-hero-card:hover .farmer-hero-img {
+        transform: scale(1.02);
+    }
+    .farmer-overlay-badge {
+        position: absolute;
+        bottom: 12px;
+        left: 12px;
+        background: rgba(18, 61, 42, 0.88);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid rgba(183, 230, 107, 0.4);
+        border-radius: 20px;
+        padding: 0.35rem 0.85rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--lime-accent);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .farmer-card-caption {
+        padding: 0.2rem 0.4rem 0.2rem;
+    }
+    .farmer-card-caption .caption-title {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.08rem;
+        font-weight: 700;
+        color: #FFFFFF;
+        margin-bottom: 0.25rem;
+    }
+    .farmer-card-caption .caption-sub {
+        font-size: 0.84rem;
+        color: #D3E4DB;
+        line-height: 1.45;
     }
 
     /* Standard Surface Card */
@@ -418,6 +489,24 @@ if "chat_messages" not in st.session_state:
     st.session_state.chat_messages = []
 
 
+@st.cache_data
+def get_image_base64(image_path: str) -> str:
+    """Read a local image file and return its base64 data URI string."""
+    try:
+        p = Path(image_path)
+        if not p.is_absolute():
+            p = Path(__file__).resolve().parent / image_path
+        if p.exists():
+            with open(p, "rb") as f:
+                encoded = base64.b64encode(f.read()).decode("utf-8")
+            suffix = p.suffix.lower().replace(".", "")
+            mime = "jpeg" if suffix in ("jpg", "jpeg") else suffix
+            return f"data:image/{mime};base64,{encoded}"
+    except Exception:
+        pass
+    return ""
+
+
 def format_metric(value: Optional[float], unit: str = "", precision: int = 1) -> str:
     """Format numeric values safely without converting None into 0.0."""
     if value is None:
@@ -481,18 +570,17 @@ st.markdown(
 # SCREEN 1: WELCOME & START
 # ==============================================================================
 if st.session_state.screen == 1:
-    hero_col_left, hero_col_right = st.columns([1.3, 0.9], gap="large")
+    hero_col_left, hero_col_right = st.columns([1.25, 0.95], gap="large")
 
     with hero_col_left:
         st.markdown(
             """
             <div class="hero-container">
                 <div class="hero-badge">⚡ Precision Agricultural Technology</div>
-                <div class="hero-title">Read the leaf.<br><span>Read the weather.</span></div>
+                <div class="hero-title">Smarter Crop Care<br><span>Starts Here.</span></div>
                 <div class="hero-sub">
-                    CropCare bridges transfer-learning computer vision with hyper-local climate intelligence.
-                    Screen crop leaves for preliminary visual symptoms while auditing environmental stress 
-                    factors through historical weather baselines.
+                    Quickly identify crop leaf issues with intelligent computer vision and understand
+                    climate conditions with hyper-local historical weather intelligence.
                 </div>
             </div>
             """,
@@ -506,40 +594,29 @@ if st.session_state.screen == 1:
                 st.rerun()
 
     with hero_col_right:
-        # 3D-inspired realistic botanical visualization with layered depth and lighting
-        st.markdown(
-            """
-            <div class="botanical-3d-card" style="background: linear-gradient(145deg, #184C34 0%, #0F2E20 100%);">
-                <svg width="220" height="220" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 15px 25px rgba(0,0,0,0.35));">
-                    <defs>
-                        <radialGradient id="leafGlow" cx="50%" cy="30%" r="70%">
-                            <stop offset="0%" stop-color="#D9F99D" stop-opacity="0.9"/>
-                            <stop offset="50%" stop-color="#65A30D" stop-opacity="0.8"/>
-                            <stop offset="100%" stop-color="#14532D" stop-opacity="1"/>
-                        </radialGradient>
-                        <linearGradient id="stemGrad" x1="0" y1="0" x2="1" y2="1">
-                            <stop offset="0%" stop-color="#B7E66B"/>
-                            <stop offset="100%" stop-color="#1B543A"/>
-                        </linearGradient>
-                        <filter id="shadow3D" x="-20%" y="-20%" width="140%" height="140%">
-                            <feDropShadow dx="3" dy="10" stdDeviation="8" flood-color="#000000" flood-opacity="0.4"/>
-                        </filter>
-                    </defs>
-                    <path d="M100 20 C140 50 170 110 100 180 C30 110 60 50 100 20 Z" fill="url(#leafGlow)" filter="url(#shadow3D)"/>
-                    <path d="M100 20 Q105 100 100 180" stroke="url(#stemGrad)" stroke-width="4" stroke-linecap="round"/>
-                    <path d="M100 60 Q130 50 145 70" stroke="#B7E66B" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/>
-                    <path d="M100 90 Q70 80 55 100" stroke="#B7E66B" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/>
-                    <path d="M100 120 Q130 110 140 130" stroke="#B7E66B" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/>
-                    <path d="M100 145 Q75 140 65 155" stroke="#B7E66B" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/>
-                </svg>
-                <div style="font-family: 'Space Grotesk', sans-serif; font-size: 1.2rem; font-weight: 700; color: #FFFFFF; margin-top: 1rem;">
-                    MobileNetV3 Neural Core
+        # Realistic Indian farmer inspecting crops in a green agricultural field
+        farmer_img_uri = get_image_base64("assets/farmer_hero.jpg")
+        if farmer_img_uri:
+            st.markdown(
+                f"""
+                <div class="farmer-hero-card">
+                    <div class="farmer-img-frame">
+                        <img src="{farmer_img_uri}" alt="Indian farmer inspecting crop leaves in a vibrant green agricultural field" class="farmer-hero-img" />
+                        <div class="farmer-overlay-badge">
+                            <span>🌱 Field Intelligence Active</span>
+                        </div>
+                    </div>
+                    <div class="farmer-card-caption">
+                        <div class="caption-title">Real-Time Agronomic Assessment</div>
+                        <div class="caption-sub">Field-tested insights connecting leaf diagnostics with environmental weather baselines.</div>
+                    </div>
                 </div>
-                <div class="botanical-badge">38-Class Transfer Learning Transfer Benchmark</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            # Fallback if image asset fails to load
+            st.image("assets/farmer_hero.jpg", caption="Agronomic Field Assessment", use_container_width=True)
 
     # Three Core Pillars
     st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
