@@ -36,6 +36,15 @@ except (ImportError, AttributeError):
     get_environment = None
 
 try:
+    from src.cropcare.chat_engine import (
+        verify_leaf_with_gemini_vision,
+        generate_chat_response,
+    )
+except (ImportError, AttributeError):
+    verify_leaf_with_gemini_vision = None
+    generate_chat_response = None
+
+try:
     from src.cropcare.economic_engine import estimate_economic_impact
 except (ImportError, AttributeError):
     estimate_economic_impact = None

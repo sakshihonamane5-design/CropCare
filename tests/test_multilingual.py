@@ -3,9 +3,13 @@
 import unittest
 from src.cropcare.multilingual import (
     SUPPORTED_LANGUAGES,
+    TRANSLATIONS,
     generate_audio_speech_html,
     t,
     translate_advisory_text,
+    translate_crop_name,
+    translate_disease_name,
+    translate_diagnosis,
 )
 
 
@@ -62,6 +66,29 @@ class TestMultilingual(unittest.TestCase):
         )
         self.assertIn("क्रॉपकेयर फसल स्वास्थ्य रिपोर्ट", advisory_hi)
         self.assertIn("ड्रिप सिंचाई करें", advisory_hi)
+
+    def test_lexicon_translations(self):
+        # Crop name translation across languages (includes bilingual format for clarity)
+        self.assertEqual(translate_crop_name("Tomato", "hi"), "टमाटर (Tomato)")
+        self.assertEqual(translate_crop_name("Potato", "mr"), "बटाटा (Potato)")
+        self.assertEqual(translate_crop_name("Corn", "te"), "మొక్కజొన్న (Corn)")
+        self.assertEqual(translate_crop_name("Apple", "ta"), "ஆப்பிள் (Apple)")
+        self.assertEqual(translate_crop_name("Grape", "es"), "Uva")
+
+        # Disease name translation
+        self.assertEqual(translate_disease_name("Early Blight", "hi"), "अगेती झुलसा (Early Blight)")
+        self.assertEqual(translate_disease_name("Healthy", "hi"), "स्वस्थ और निरोगी फसल (Healthy)")
+        self.assertEqual(translate_disease_name("Late Blight", "mr"), "पछेती करपा (Late Blight)")
+
+        # Combined diagnosis translation
+        diag_hi = translate_diagnosis("Tomato", "Early Blight", "hi")
+        self.assertIn("टमाटर", diag_hi[0])
+        self.assertIn("अगेती झुलसा", diag_hi[1])
+
+    def test_all_translation_keys_present_in_supported_languages(self):
+        for key, lang_map in TRANSLATIONS.items():
+            for code in SUPPORTED_LANGUAGES.keys():
+                self.assertIn(code, lang_map, f"Key '{key}' missing translation for language '{code}'")
 
 
 if __name__ == "__main__":
