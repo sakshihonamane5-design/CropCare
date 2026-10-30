@@ -1,4 +1,4 @@
-﻿"""CropCare ΓÇö Grad-CAM Visual Explainability Module.
+"""CropCare — Grad-CAM Visual Explainability Module.
 
 This module provides Gradient-weighted Class Activation Mapping (Grad-CAM)
 for the trained MobileNetV3-Small leaf classifier. It visualizes which spatial
