@@ -130,16 +130,16 @@ class TestStandoutFeaturesOffline(unittest.TestCase):
     def test_vernacular_translation_and_audio(self):
         """Verify Hindi and Marathi translations and audio script creation."""
         c_hi, d_hi = translate_diagnosis("Tomato", "early_blight", lang="hi")
-        self.assertIn("αñƒαñ«αñ╛αñƒαñ░", c_hi)
-        self.assertIn("αñ¥αÑüαñ▓αñ╕αñ╛", d_hi)
+        self.assertIn("टमाटर", c_hi)
+        self.assertIn("झुलसा", d_hi)
 
         c_mr, d_mr = translate_diagnosis("Potato", "late_blight", lang="mr")
-        self.assertIn("αñ¼αñƒαñ╛αñƒαñ╛", c_mr)
-        self.assertIn("αñòαñ░αñ¬αñ╛", d_mr)
+        self.assertIn("बटाटा", c_mr)
+        self.assertIn("करपा", d_mr)
 
         script_hi = generate_audio_script("Tomato", "Early blight", 0.94, "HIGH_ALIGNMENT", "Spray Window Open", lang="hi")
-        self.assertIn("αñƒαñ«αñ╛αñƒαñ░", script_hi)
-        self.assertIn("αñ¬αÑìαñ░αññαñ┐αñ╢αññ", script_hi)
+        self.assertIn("टमाटर", script_hi)
+        self.assertIn("प्रतिशत", script_hi)
 
 
 if __name__ == "__main__":
