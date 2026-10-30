@@ -417,3 +417,4 @@ def get_nurturing_recommendations(crop: str, disease: str, severity_stage: int =
             ),
         },
     }
+

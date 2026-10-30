@@ -5,3 +5,7 @@ __pycache__/
 .venv/
 env/
 venv/
+.streamlit/secrets.toml
+secrets.toml
+
+data/field_uploads/

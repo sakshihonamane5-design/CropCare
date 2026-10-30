@@ -5,6 +5,12 @@ from src.cropcare.agronomy_engine import (
     classify_disease_severity,
     get_nurturing_recommendations,
 )
+from src.cropcare.multilingual import (
+    SUPPORTED_LANGUAGES,
+    generate_audio_speech_html,
+    t,
+    translate_advisory_text,
+)
 from src.cropcare.image_engine import (
     CROP_METADATA,
     check_image_quality,
@@ -36,4 +42,8 @@ __all__ = [
     "calculate_foliar_damage_index",
     "classify_disease_severity",
     "get_nurturing_recommendations",
+    "SUPPORTED_LANGUAGES",
+    "t",
+    "generate_audio_speech_html",
+    "translate_advisory_text",
 ]

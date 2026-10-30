@@ -6,6 +6,7 @@ leaf screening and hyper-local environmental intelligence.
 
 from __future__ import annotations
 
+import base64
 import io
 import os
 from pathlib import Path
@@ -15,6 +16,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 import streamlit as st
+import streamlit.components.v1 as components
 
 from src.cropcare.climate_engine import get_environment
 from src.cropcare.agronomy_engine import (
@@ -27,6 +29,12 @@ from src.cropcare.image_engine import (
     get_supported_crops,
     predict_image,
     register_field_leaf,
+)
+from src.cropcare.multilingual import (
+    SUPPORTED_LANGUAGES,
+    generate_audio_speech_html,
+    t,
+    translate_advisory_text,
 )
 
 # Configure page layout and title
@@ -227,6 +235,76 @@ st.markdown(
         margin-top: 0.6rem;
     }
 
+    /* Farmer Hero Card */
+    .farmer-hero-card {
+        background: linear-gradient(145deg, #184C34 0%, #0F2E20 100%);
+        border: 1px solid rgba(183, 230, 107, 0.25);
+        border-radius: 24px;
+        padding: 1.25rem;
+        box-shadow: var(--shadow-hero);
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .farmer-hero-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 24px 50px -8px rgba(18, 61, 42, 0.45);
+    }
+    .farmer-img-frame {
+        position: relative;
+        width: 100%;
+        border-radius: 18px;
+        overflow: hidden;
+        aspect-ratio: 4/3;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+    .farmer-hero-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        transition: transform 0.4s ease;
+    }
+    .farmer-hero-card:hover .farmer-hero-img {
+        transform: scale(1.02);
+    }
+    .farmer-overlay-badge {
+        position: absolute;
+        bottom: 12px;
+        left: 12px;
+        background: rgba(18, 61, 42, 0.88);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid rgba(183, 230, 107, 0.4);
+        border-radius: 20px;
+        padding: 0.35rem 0.85rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--lime-accent);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .farmer-card-caption {
+        padding: 0.2rem 0.4rem 0.2rem;
+    }
+    .farmer-card-caption .caption-title {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.08rem;
+        font-weight: 700;
+        color: #FFFFFF;
+        margin-bottom: 0.25rem;
+    }
+    .farmer-card-caption .caption-sub {
+        font-size: 0.84rem;
+        color: #D3E4DB;
+        line-height: 1.45;
+    }
+
     /* Standard Surface Card */
     .surface-card {
         background: var(--surface-white);
@@ -388,6 +466,49 @@ st.markdown(
         background-color: var(--ivory-bg) !important;
         border-color: var(--forest-mid) !important;
     }
+
+    /* Floating CropCare AI Assistant Launcher */
+    .st-key-chat_launcher_btn {
+        position: fixed !important;
+        bottom: 24px !important;
+        right: 24px !important;
+        z-index: 999990 !important;
+    }
+    .st-key-chat_launcher_btn > button {
+        border-radius: 50px !important;
+        padding: 0.75rem 1.4rem !important;
+        background: var(--forest-dark) !important;
+        color: var(--lime-accent) !important;
+        border: 2px solid var(--lime-accent) !important;
+        box-shadow: 0 10px 25px rgba(18, 61, 42, 0.4) !important;
+        font-weight: 700 !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+    }
+    .st-key-chat_launcher_btn > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 14px 30px rgba(18, 61, 42, 0.5) !important;
+    }
+
+    /* Floating Chat Dialog Panel */
+    .st-key-cropcare_chat_panel {
+        position: fixed !important;
+        bottom: 85px !important;
+        right: 24px !important;
+        width: 390px !important;
+        max-width: calc(100vw - 48px) !important;
+        max-height: calc(100vh - 110px) !important;
+        background: var(--surface-white) !important;
+        border: 1.5px solid rgba(18, 61, 42, 0.18) !important;
+        border-radius: 20px !important;
+        box-shadow: 0 20px 50px rgba(18, 61, 42, 0.3) !important;
+        z-index: 999995 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        padding: 1.2rem !important;
+        overflow: hidden !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -399,8 +520,14 @@ st.markdown(
 if "screen" not in st.session_state:
     st.session_state.screen = 1  # 1: Welcome, 2: Leaf, 3: Climate, 4: Summary
 
+if "app_language" not in st.session_state:
+    st.session_state.app_language = "en"
+
 if "leaf_image" not in st.session_state:
     st.session_state.leaf_image = None
+
+if "leaf_image_id" not in st.session_state:
+    st.session_state.leaf_image_id = None
 
 if "leaf_result" not in st.session_state:
     st.session_state.leaf_result = None
@@ -422,6 +549,30 @@ if "climate_days" not in st.session_state:
 
 if "climate_result" not in st.session_state:
     st.session_state.climate_result = None
+
+if "chat_open" not in st.session_state:
+    st.session_state.chat_open = False
+
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = []
+
+
+@st.cache_data
+def get_image_base64(image_path: str) -> str:
+    """Read a local image file and return its base64 data URI string."""
+    try:
+        p = Path(image_path)
+        if not p.is_absolute():
+            p = Path(__file__).resolve().parent / image_path
+        if p.exists():
+            with open(p, "rb") as f:
+                encoded = base64.b64encode(f.read()).decode("utf-8")
+            suffix = p.suffix.lower().replace(".", "")
+            mime = "jpeg" if suffix in ("jpg", "jpeg") else suffix
+            return f"data:image/{mime};base64,{encoded}"
+    except Exception:
+        pass
+    return ""
 
 
 def format_metric(value: Optional[float], unit: str = "", precision: int = 1) -> str:
@@ -451,25 +602,45 @@ CROP_OPTIONS = [
 ]
 
 # ==============================================================================
-# TOP BRANDING & PROGRESS BAR
+# TOP BRANDING, LANGUAGE SWITCHER & PROGRESS BAR
 # ==============================================================================
-st.markdown(
-    """
-    <div class="brand-bar">
-        <div class="brand-logo">🌱 CropCare™</div>
-        <div class="brand-tag">Agronomic Intelligence Platform</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+top_brand_col, top_lang_col = st.columns([3.2, 1.2])
+
+lang_keys = list(SUPPORTED_LANGUAGES.keys())
+lang_labels = [SUPPORTED_LANGUAGES[k]["label"] for k in lang_keys]
+curr_lang_idx = lang_keys.index(st.session_state.app_language) if st.session_state.app_language in lang_keys else 0
+
+with top_brand_col:
+    st.markdown(
+        f"""
+        <div class="brand-bar">
+            <div class="brand-logo">🌱 CropCare™</div>
+            <div class="brand-tag">{t('app_tagline', st.session_state.app_language)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with top_lang_col:
+    chosen_label = st.selectbox(
+        "🌐 Language",
+        options=lang_labels,
+        index=curr_lang_idx,
+        key="global_lang_selector",
+        help="Choose preferred interface & audio guidance language (English, हिन्दी, मराठी, తెలుగు, தமிழ், Español)",
+    )
+    chosen_code = lang_keys[lang_labels.index(chosen_label)]
+    if chosen_code != st.session_state.app_language:
+        st.session_state.app_language = chosen_code
+        st.rerun()
 
 # Interactive Top Navigation Buttons
 t_col1, t_col2, t_col3, t_col4 = st.columns(4)
 nav_items = [
-    (t_col1, 1, "🏠 1. Welcome"),
-    (t_col2, 2, "🍃 2. Leaf Screening & Studio"),
-    (t_col3, 3, "🌦️ 3. Climate Insights"),
-    (t_col4, 4, "📋 4. Executive Summary"),
+    (t_col1, 1, f"🏠 {t('step_1', st.session_state.app_language)}"),
+    (t_col2, 2, f"🍃 {t('step_2', st.session_state.app_language)}"),
+    (t_col3, 3, f"🌦️ {t('step_3', st.session_state.app_language)}"),
+    (t_col4, 4, f"📋 {t('step_4', st.session_state.app_language)}"),
 ]
 for col, s_num, s_title in nav_items:
     with col:
@@ -489,27 +660,32 @@ div1_cls = "active" if curr > 1 else ""
 div2_cls = "active" if curr > 2 else ""
 div3_cls = "active" if curr > 3 else ""
 
+s1_txt = t("step_1", st.session_state.app_language)
+s2_txt = t("step_2", st.session_state.app_language)
+s3_txt = t("step_3", st.session_state.app_language)
+s4_txt = t("step_4", st.session_state.app_language)
+
 st.markdown(
     f"""
     <div class="step-progress-wrapper">
         <div class="step-item {step1_cls}">
             <div class="step-pill">1</div>
-            <span>Welcome</span>
+            <span>{s1_txt}</span>
         </div>
         <div class="step-divider {div1_cls}"></div>
         <div class="step-item {step2_cls}">
             <div class="step-pill">2</div>
-            <span>Leaf Screening & Continual Studio</span>
+            <span>{s2_txt}</span>
         </div>
         <div class="step-divider {div2_cls}"></div>
         <div class="step-item {step3_cls}">
             <div class="step-pill">3</div>
-            <span>Climate Insights</span>
+            <span>{s3_txt}</span>
         </div>
         <div class="step-divider {div3_cls}"></div>
         <div class="step-item {step4_cls}">
             <div class="step-pill">4</div>
-            <span>Executive Summary</span>
+            <span>{s4_txt}</span>
         </div>
     </div>
     """,
@@ -521,18 +697,16 @@ st.markdown(
 # SCREEN 1: WELCOME & START
 # ==============================================================================
 if st.session_state.screen == 1:
-    hero_col_left, hero_col_right = st.columns([1.3, 0.9], gap="large")
+    hero_col_left, hero_col_right = st.columns([1.25, 0.95], gap="large")
 
     with hero_col_left:
         st.markdown(
-            """
+            f"""
             <div class="hero-container">
-                <div class="hero-badge">⚡ Precision Agricultural Technology</div>
-                <div class="hero-title">Read the leaf.<br><span>Read the weather.</span></div>
+                <div class="hero-badge">⚡ {t('precision_tech', st.session_state.app_language)}</div>
+                <div class="hero-title">{t('welcome_title', st.session_state.app_language)}</div>
                 <div class="hero-sub">
-                    CropCare bridges transfer-learning computer vision with hyper-local climate intelligence.
-                    Screen crop leaves for preliminary visual symptoms while auditing environmental stress 
-                    factors through historical weather baselines.
+                    {t('welcome_sub', st.session_state.app_language)}
                 </div>
             </div>
             """,
@@ -541,48 +715,38 @@ if st.session_state.screen == 1:
 
         c1, c2 = st.columns([1, 1.3])
         with c1:
-            if st.button("Start Screening →", type="primary", use_container_width=True):
+            if st.button(f"{t('start_screening', st.session_state.app_language)} →", type="primary", use_container_width=True):
                 st.session_state.screen = 2
                 st.rerun()
         with c2:
-            if st.button("🧠 Continual Learning Studio Tab →", type="secondary", use_container_width=True):
+            if st.button(f"🧠 {t('continual_studio', st.session_state.app_language)} →", type="secondary", use_container_width=True):
                 st.session_state.screen = 2
                 st.rerun()
 
     with hero_col_right:
-        st.markdown(
-            """
-            <div class="botanical-3d-card" style="background: linear-gradient(145deg, #184C34 0%, #0F2E20 100%);">
-                <svg width="220" height="220" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 15px 25px rgba(0,0,0,0.35));">
-                    <defs>
-                        <radialGradient id="leafGlow" cx="50%" cy="30%" r="70%">
-                            <stop offset="0%" stop-color="#D9F99D" stop-opacity="0.9"/>
-                            <stop offset="50%" stop-color="#65A30D" stop-opacity="0.8"/>
-                            <stop offset="100%" stop-color="#14532D" stop-opacity="1"/>
-                        </radialGradient>
-                        <linearGradient id="stemGrad" x1="0" y1="0" x2="1" y2="1">
-                            <stop offset="0%" stop-color="#B7E66B"/>
-                            <stop offset="100%" stop-color="#1B543A"/>
-                        </linearGradient>
-                        <filter id="shadow3D" x="-20%" y="-20%" width="140%" height="140%">
-                            <feDropShadow dx="3" dy="10" stdDeviation="8" flood-color="#000000" flood-opacity="0.4"/>
-                        </filter>
-                    </defs>
-                    <path d="M100 20 C140 50 170 110 100 180 C30 110 60 50 100 20 Z" fill="url(#leafGlow)" filter="url(#shadow3D)"/>
-                    <path d="M100 20 Q105 100 100 180" stroke="url(#stemGrad)" stroke-width="4" stroke-linecap="round"/>
-                    <path d="M100 60 Q130 50 145 70" stroke="#B7E66B" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/>
-                    <path d="M100 90 Q70 80 55 100" stroke="#B7E66B" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/>
-                    <path d="M100 120 Q130 110 140 130" stroke="#B7E66B" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/>
-                    <path d="M100 145 Q75 140 65 155" stroke="#B7E66B" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/>
-                </svg>
-                <div style="font-family: 'Space Grotesk', sans-serif; font-size: 1.2rem; font-weight: 700; color: #FFFFFF; margin-top: 1rem;">
-                    MobileNetV3 Neural Core
+        # Realistic Indian farmer inspecting crops in a green agricultural field
+        farmer_img_uri = get_image_base64("assets/farmer_hero.jpg")
+        if farmer_img_uri:
+            st.markdown(
+                f"""
+                <div class="farmer-hero-card">
+                    <div class="farmer-img-frame">
+                        <img src="{farmer_img_uri}" alt="Indian farmer inspecting crop leaves in a vibrant green agricultural field" class="farmer-hero-img" />
+                        <div class="farmer-overlay-badge">
+                            <span>🌱 Field Intelligence Active</span>
+                        </div>
+                    </div>
+                    <div class="farmer-card-caption">
+                        <div class="caption-title">Real-Time Agronomic Assessment</div>
+                        <div class="caption-sub">Field-tested intelligence connecting visual foliar symptoms with historical weather dynamics.</div>
+                    </div>
                 </div>
-                <div class="botanical-badge">38-Class Transfer Learning Transfer Benchmark</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            # Fallback if image asset fails to load
+            st.image("assets/farmer_hero.jpg", caption="Agronomic Field Assessment", use_container_width=True)
 
     # Three Core Pillars
     st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
@@ -772,18 +936,42 @@ elif st.session_state.screen == 2:
         leaf_col_left, leaf_col_right = st.columns([1, 1], gap="large")
 
         with leaf_col_left:
-            st.markdown("#### 📤 Upload Leaf Photograph")
-            uploaded_file = st.file_uploader(
-                "Upload image (JPG, JPEG, PNG)",
-                type=["jpg", "jpeg", "png"],
-                key="screening_uploader",
-                help="High-contrast, focused imagery centered on a single leaf produces the most reliable screening.",
+            st.markdown(f"#### 📷 {t('upload_photo', st.session_state.app_language)}")
+
+            input_mode = st.radio(
+                "Acquisition Method:",
+                options=["📁 Upload Image", "📸 Click Photo (Camera)"],
+                horizontal=True,
+                help="Choose between selecting an image file or snapping a live photo with your camera.",
             )
 
-            if uploaded_file is not None:
+            active_file = None
+            new_source_id = None
+
+            if input_mode == "📁 Upload Image":
+                active_file = st.file_uploader(
+                    "Upload leaf image (JPG, JPEG, PNG)",
+                    type=["jpg", "jpeg", "png"],
+                    key="screening_uploader",
+                    help="High-contrast, focused imagery centered on a single leaf produces the most reliable screening.",
+                )
+                if active_file is not None:
+                    new_source_id = f"upload_{active_file.name}_{active_file.size}"
+            else:
+                active_file = st.camera_input(
+                    "Capture live leaf photograph",
+                    key="leaf_camera_input",
+                    help="Center the plant leaf with uniform lighting and click Take Photo.",
+                )
+                if active_file is not None:
+                    new_source_id = f"camera_{active_file.name}_{active_file.size}"
+
+            if active_file is not None and new_source_id != st.session_state.leaf_image_id:
                 try:
-                    img = Image.open(uploaded_file)
+                    img = Image.open(active_file).convert("RGB")
                     st.session_state.leaf_image = img
+                    st.session_state.leaf_image_id = new_source_id
+                    st.session_state.leaf_result = None
                 except Exception as e:
                     st.error(f"Image decoding failed: {e}")
 
@@ -1071,6 +1259,26 @@ elif st.session_state.screen == 2:
                             """,
                             unsafe_allow_html=True,
                         )
+
+                    # ==================================================================
+                    # VOICE AGRONOMIST AUDIO ADVISORY (Hands-free Multilingual Player)
+                    # ==================================================================
+                    audio_title, audio_text = translate_advisory_text(
+                        crop=crop,
+                        disease=disease,
+                        severity_stage=sev["stage_id"],
+                        confidence=conf,
+                        lang=st.session_state.app_language,
+                    )
+                    audio_html = generate_audio_speech_html(
+                        title=audio_title,
+                        text_to_speak=audio_text,
+                        lang=st.session_state.app_language,
+                    )
+                    st.markdown("---")
+                    st.markdown(f"#### 🎙️ {t('audio_listen_btn', st.session_state.app_language)}")
+                    st.caption("Native browser audio synthesizer providing real-time hands-free advisory in the farmer's chosen language:")
+                    components.html(audio_html, height=130)
 
                     st.markdown(
                         """
@@ -1500,6 +1708,22 @@ elif st.session_state.screen == 4:
                 st.warning("Flagged: Ambiguous / Low Confidence Screening. Field verification advised.")
             else:
                 st.success("Flagged: High Optical Confidence Diagnosis")
+
+            # Multilingual Voice Advisory Player
+            audio_title_s4, audio_text_s4 = translate_advisory_text(
+                crop=c_s4,
+                disease=d_s4,
+                severity_stage=sev_s4["stage_id"],
+                confidence=conf_s4,
+                lang=st.session_state.app_language,
+            )
+            audio_html_s4 = generate_audio_speech_html(
+                title=audio_title_s4,
+                text_to_speak=audio_text_s4,
+                lang=st.session_state.app_language,
+            )
+            st.markdown(f"##### 🎙️ {t('audio_listen_btn', st.session_state.app_language)}")
+            components.html(audio_html_s4, height=130)
         else:
             st.info("No leaf screening was completed in this session.")
 
@@ -1564,7 +1788,106 @@ elif st.session_state.screen == 4:
         if st.button("🔄 Start New Screening Session", type="primary"):
             st.session_state.screen = 1
             st.session_state.leaf_image = None
+            st.session_state.leaf_image_id = None
             st.session_state.leaf_result = None
             st.session_state.climate_result = None
             st.session_state.selected_crop_type = "All Crops (Auto-Detect)"
             st.rerun()
+
+
+# ==============================================================================
+# FLOATING CROPCARE AI ASSISTANT (Persistent across all 4 workflow screens)
+# ==============================================================================
+def render_cropcare_chatbot() -> None:
+    """Render the floating Gemini AI Assistant launcher and interactive panel."""
+    # Floating Launcher Button in Bottom-Right
+    launcher_label = "💬 CropCare AI" if not st.session_state.chat_open else "✕ Close Assistant"
+    if st.button(
+        launcher_label,
+        key="chat_launcher_btn",
+        help="Ask questions about crop diseases, screening, or climate insights",
+    ):
+        st.session_state.chat_open = not st.session_state.chat_open
+        st.rerun()
+
+    # Floating Dialog Panel when Open
+    if st.session_state.chat_open:
+        with st.container(key="cropcare_chat_panel"):
+            head_col1, head_col2, head_col3 = st.columns([3, 0.8, 0.8])
+            with head_col1:
+                st.markdown(
+                    "<div style='font-family: \"Space Grotesk\", sans-serif; font-size: 1.15rem; font-weight: 700; color: #123D2A;'>🌱 CropCare Assistant</div>",
+                    unsafe_allow_html=True,
+                )
+            with head_col2:
+                if st.button("🗑️", key="chat_clear_btn", help="Clear conversation history"):
+                    st.session_state.chat_messages = []
+                    st.rerun()
+            with head_col3:
+                if st.button("✕", key="chat_close_btn", help="Close Assistant"):
+                    st.session_state.chat_open = False
+                    st.rerun()
+
+            st.caption("Agronomic Guidance • Powered by Google Gemini")
+
+            # Suggested Prompts (shown when conversation is new)
+            if len(st.session_state.chat_messages) <= 1:
+                st.markdown(
+                    "<div style='font-size: 0.8rem; font-weight: 600; color: #526E60; margin-bottom: 0.2rem;'>Suggested Questions:</div>",
+                    unsafe_allow_html=True,
+                )
+                chip_col1, chip_col2 = st.columns(2)
+                from src.cropcare.chat_engine import SUGGESTED_PROMPTS
+
+                with chip_col1:
+                    if st.button(SUGGESTED_PROMPTS[0], key="sug_chip_0", use_container_width=True):
+                        _submit_chat_message(SUGGESTED_PROMPTS[0])
+                        st.rerun()
+                with chip_col2:
+                    if st.button(SUGGESTED_PROMPTS[1], key="sug_chip_1", use_container_width=True):
+                        _submit_chat_message(SUGGESTED_PROMPTS[1])
+                        st.rerun()
+
+            # Message History Box
+            chat_container = st.container(height=260)
+            with chat_container:
+                if not st.session_state.chat_messages:
+                    st.markdown(
+                        "<div style='color: #526E60; font-size: 0.86rem; text-align: center; margin-top: 2rem; line-height: 1.5;'>"
+                        "👋 <strong>Welcome!</strong><br>Ask about crop diseases, symptoms, your leaf screening results, or local climate stress factors."
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    for turn in st.session_state.chat_messages:
+                        role = turn.get("role", "user")
+                        with st.chat_message(role, avatar="🧑‍🌾" if role == "user" else "🌱"):
+                            st.markdown(turn.get("content", ""))
+
+            # Input Prompt
+            prompt_text = st.chat_input("Ask about crops, disease, or weather...", key="chat_user_prompt")
+            if prompt_text:
+                _submit_chat_message(prompt_text)
+                st.rerun()
+
+
+def _submit_chat_message(user_text: str) -> None:
+    """Send user text to Gemini with contextual session state and append reply."""
+    st.session_state.chat_messages.append({"role": "user", "content": user_text})
+    from src.cropcare.chat_engine import build_agronomic_context, generate_chat_response
+
+    ctx = build_agronomic_context(
+        screen=st.session_state.screen,
+        leaf_result=st.session_state.leaf_result,
+        climate_result=st.session_state.climate_result,
+        climate_days=st.session_state.climate_days,
+    )
+    with st.spinner("Consulting CropCare Assistant..."):
+        reply = generate_chat_response(
+            messages=st.session_state.chat_messages,
+            context_str=ctx,
+        )
+    st.session_state.chat_messages.append({"role": "assistant", "content": reply})
+
+
+render_cropcare_chatbot()
