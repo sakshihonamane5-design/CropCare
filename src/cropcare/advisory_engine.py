@@ -253,3 +253,60 @@ def generate_actionable_advisory(
             "advice": " ".join(spray_notes),
         },
     }
+
+
+def generate_recovery_roadmap(crop: str, disease: str, spray_status: str = "OPTIMAL") -> List[Dict[str, str]]:
+    """Generate an actionable 7-day chronologically structured recovery plan for the farmer."""
+    is_healthy = "healthy" in disease.lower()
+
+    if is_healthy:
+        return [
+            {"day": "Day 1–2", "stage": "Nutritional Maintenance", "action": "Maintain scheduled micro-irrigation and balanced N-P-K fertigation."},
+            {"day": "Day 3–4", "stage": "Canopy Inspection", "action": "Inspect lower canopy leaves for early signs of aphids, mites, or micro-lesions."},
+            {"day": "Day 5–7", "stage": "Preventive Bio-Shield", "action": "Apply preventive neem oil extract (3 mL/L) to maintain leaf resistance."},
+        ]
+
+    spray_timing = "Proceed with morning spray (6:30–8:30 AM) using fine mist nozzles."
+    if "HOLD" in spray_status:
+        spray_timing = "Rain expected: HOLD spray until foliage dries and rain clears for at least 6 consecutive hours."
+    elif "TIME" in spray_status:
+        spray_timing = "High temperature alert: Spray strictly between 6:00 AM and 8:00 AM to prevent phytotoxic burn."
+
+    return [
+        {
+            "day": "Day 1",
+            "stage": "🚨 Immediate Field Sanitation",
+            "action": f"Carefully prune infected lower leaves showing {disease.replace('_', ' ')} lesions. Do NOT compost; dispose outside the farm boundary to stop sporulation.",
+        },
+        {
+            "day": "Day 2–3",
+            "stage": "🎯 Weather-Smart Targeted Treatment",
+            "action": f"{spray_timing} Apply recommended biological or contact protective fungicide to both upper and lower leaf surfaces.",
+        },
+        {
+            "day": "Day 4–5",
+            "stage": "🧪 Nutrient Balancing & Stress Recovery",
+            "action": "Avoid high-nitrogen fertilizer (excess N softens leaf cuticle). Apply soluble Potassium Silicate or Zinc sulphate to strengthen leaf cell walls.",
+        },
+        {
+            "day": "Day 7",
+            "stage": "🔬 Efficacy Check & Re-screening",
+            "action": "Take fresh leaf photos and re-scan using CropCare. Verify that lesion spread has halted and new apical growth is disease-free.",
+        },
+    ]
+
+
+def build_whatsapp_share_url(crop: str, disease: str, confidence_pct: float, location_name: str, urgency: str) -> str:
+    """Build a pre-filled WhatsApp Web / Mobile sharing URL for sending field alerts to extension officers."""
+    import urllib.parse
+
+    msg = (
+        f"🌱 *CropCare Agronomic Alert*\n\n"
+        f"• *Crop:* {crop}\n"
+        f"• *Diagnosis:* {disease.replace('_', ' ')} ({confidence_pct:.1f}% confidence)\n"
+        f"• *Location:* {location_name}\n"
+        f"• *Urgency:* {urgency}\n\n"
+        f"Generated via CropCare AI Agronomic Platform. Please review recommended IPM treatment."
+    )
+    return f"https://api.whatsapp.com/send?text={urllib.parse.quote(msg)}"
+

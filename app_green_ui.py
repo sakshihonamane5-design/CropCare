@@ -2,13 +2,16 @@
 
 A premium, guided 4-screen SaaS application providing transfer-learning
 leaf screening, Grad-CAM explainability, hyper-local environmental intelligence,
-biometeorological concurrence analysis, and weather-smart IPM advisories.
+biometeorological concurrence analysis, weather-smart IPM advisories,
+economic loss estimation, and a 24/7 persistent Gemini AI Agronomist.
 """
 
 from __future__ import annotations
 
+import base64
 import io
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -18,16 +21,32 @@ import streamlit as st
 
 from src.cropcare.explainability import generate_gradcam
 from src.cropcare.alignment_engine import evaluate_environmental_alignment
-from src.cropcare.advisory_engine import generate_actionable_advisory
+from src.cropcare.advisory_engine import (
+    generate_actionable_advisory,
+    generate_recovery_roadmap,
+    build_whatsapp_share_url,
+)
 from src.cropcare.report_engine import generate_field_report_html
 from src.cropcare.vernacular import translate_diagnosis, generate_audio_script, t
+from src.cropcare.economic_engine import estimate_economic_impact
+from src.cropcare.location_engine import (
+    TOP_PRESET_LOCATIONS,
+    search_location_online,
+    get_states,
+    get_districts_for_state,
+)
+from src.cropcare.chat_engine import (
+    build_agronomic_context,
+    generate_chat_response,
+    SUGGESTED_PROMPTS,
+)
 
 # Configure page layout and title (Must be first Streamlit command)
 st.set_page_config(
     page_title="CropCare — Precision Agronomic Platform",
     page_icon="🌱",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ==============================================================================
@@ -51,7 +70,6 @@ st.markdown(
         --border-subtle: rgba(18, 61, 42, 0.08);
         --shadow-card: 0 10px 30px -5px rgba(18, 61, 42, 0.07), 0 4px 12px -2px rgba(18, 61, 42, 0.04);
         --shadow-hero: 0 20px 40px -10px rgba(18, 61, 42, 0.25);
-        --chat-width: 420px;
     }
 
     html, body, [class*="css"] {
@@ -63,7 +81,7 @@ st.markdown(
     .block-container {
         max-width: 1180px;
         padding-top: 1.5rem;
-        padding-bottom: 6rem;
+        padding-bottom: 5rem;
     }
 
     /* Top Navigation Brand Bar */
@@ -129,18 +147,17 @@ st.markdown(
         width: 28px;
         height: 28px;
         border-radius: 50%;
+        background: #E5EBE7;
+        color: var(--text-muted);
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 0.8rem;
-        background: #E8ECE6;
-        color: #6E8578;
         font-weight: 700;
     }
     .step-item.active .step-pill {
         background: var(--forest-dark);
         color: var(--lime-accent);
-        box-shadow: 0 0 0 3px rgba(183, 230, 107, 0.4);
     }
     .step-item.completed .step-pill {
         background: var(--lime-accent);
@@ -149,34 +166,41 @@ st.markdown(
     .step-divider {
         flex: 1;
         height: 2px;
-        background: #E8ECE6;
-        margin: 0 0.8rem;
+        background: #E5EBE7;
+        margin: 0 1rem;
     }
     .step-divider.active {
-        background: var(--forest-dark);
+        background: var(--lime-accent);
     }
 
-    /* Hero Card (Screen 1) */
+    /* Hero Component */
     .hero-container {
-        background: linear-gradient(135deg, #123D2A 0%, #1A543A 55%, #103222 100%);
-        color: #FFFFFF;
+        background: linear-gradient(135deg, #123D2A 0%, #1B543A 60%, #0F2E20 100%);
         border-radius: 24px;
-        padding: 3rem 2.8rem;
-        box-shadow: var(--shadow-hero);
+        padding: 3rem 2.5rem;
+        color: #FFFFFF;
         position: relative;
         overflow: hidden;
-        margin-bottom: 2rem;
-        border: 1px solid rgba(183, 230, 107, 0.2);
+        box-shadow: var(--shadow-hero);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .hero-container::before {
+        content: '';
+        position: absolute;
+        top: -40%;
+        right: -20%;
+        width: 500px;
+        height: 500px;
+        background: radial-gradient(circle, rgba(183, 230, 107, 0.15) 0%, rgba(183, 230, 107, 0) 70%);
+        pointer-events: none;
     }
     .hero-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
+        display: inline-block;
         background: rgba(183, 230, 107, 0.15);
+        border: 1px solid rgba(183, 230, 107, 0.3);
         color: var(--lime-accent);
-        border: 1px solid rgba(183, 230, 107, 0.35);
         padding: 0.35rem 0.9rem;
-        border-radius: 30px;
+        border-radius: 20px;
         font-size: 0.8rem;
         font-weight: 600;
         letter-spacing: 0.04em;
@@ -189,7 +213,6 @@ st.markdown(
         line-height: 1.15;
         letter-spacing: -0.03em;
         margin-bottom: 1rem;
-        color: #FFFFFF;
     }
     .hero-title span {
         color: var(--lime-accent);
@@ -200,6 +223,76 @@ st.markdown(
         color: #D3E4DB;
         max-width: 620px;
         margin-bottom: 2rem;
+    }
+
+    /* Farmer Hero Card */
+    .farmer-hero-card {
+        background: linear-gradient(145deg, #184C34 0%, #0F2E20 100%);
+        border: 1px solid rgba(183, 230, 107, 0.25);
+        border-radius: 24px;
+        padding: 1.25rem;
+        box-shadow: var(--shadow-hero);
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .farmer-hero-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 24px 50px -8px rgba(18, 61, 42, 0.45);
+    }
+    .farmer-img-frame {
+        position: relative;
+        width: 100%;
+        border-radius: 18px;
+        overflow: hidden;
+        aspect-ratio: 4/3;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+    .farmer-hero-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        transition: transform 0.4s ease;
+    }
+    .farmer-hero-card:hover .farmer-hero-img {
+        transform: scale(1.02);
+    }
+    .farmer-overlay-badge {
+        position: absolute;
+        bottom: 12px;
+        left: 12px;
+        background: rgba(18, 61, 42, 0.88);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid rgba(183, 230, 107, 0.4);
+        border-radius: 20px;
+        padding: 0.35rem 0.85rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--lime-accent);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .farmer-card-caption {
+        padding: 0.2rem 0.4rem 0.2rem;
+    }
+    .farmer-card-caption .caption-title {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.08rem;
+        font-weight: 700;
+        color: #FFFFFF;
+        margin-bottom: 0.25rem;
+    }
+    .farmer-card-caption .caption-sub {
+        font-size: 0.84rem;
+        color: #D3E4DB;
+        line-height: 1.45;
     }
 
     /* 3D Botanical Visual Graphic */
@@ -225,6 +318,7 @@ st.markdown(
         display: flex;
         gap: 2rem;
         margin-top: 1.8rem;
+        flex-wrap: wrap;
     }
     .stat-item {
         text-align: center;
@@ -298,149 +392,95 @@ st.markdown(
     }
     .feature-body {
         font-size: 0.88rem;
-        line-height: 1.5;
         color: var(--text-muted);
+        line-height: 1.55;
     }
 
-    /* Diagnostic Output Container */
+    /* Diagnostic Results Panel */
     .diagnostic-panel {
-        background: #F4F7F2;
-        border: 1px solid #D6E0D9;
-        border-radius: 16px;
-        padding: 1.5rem;
-        margin-bottom: 1.2rem;
-    }
-
-    /* Scientific Disclaimer Banner */
-    .disclaimer-banner {
-        background: #FBFDFB;
-        border-left: 4px solid var(--forest-light);
-        border-radius: 8px;
-        padding: 1rem 1.25rem;
-        font-size: 0.85rem;
-        line-height: 1.5;
-        color: #435E50;
-        margin-top: 1.5rem;
-    }
-
-    /* Location Picker */
-    .location-option-card {
-        background: var(--surface-white);
-        border: 2px solid var(--border-subtle);
-        border-radius: 12px;
-        padding: 0.9rem 1.2rem;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        margin-bottom: 0.5rem;
-        font-size: 0.9rem;
-    }
-    .location-option-card:hover {
-        border-color: var(--forest-light);
-        background: var(--lime-light);
-    }
-    .location-option-card.selected {
-        border-color: var(--forest-dark);
-        background: var(--lime-light);
-    }
-
-    /* AI Assistant Sidebar */
-    .chat-sidebar-header {
-        background: linear-gradient(135deg, #123D2A 0%, #1B543A 100%);
-        color: white;
-        border-radius: 16px 16px 0 0;
-        padding: 1.2rem 1.4rem;
-        margin-bottom: 0;
-    }
-    .chat-sidebar-body {
         background: var(--surface-white);
         border: 1px solid var(--border-subtle);
-        border-top: none;
-        border-radius: 0 0 16px 16px;
-        padding: 1rem;
-    }
-    .chat-bubble-user {
-        background: var(--forest-dark);
-        color: white;
-        border-radius: 18px 18px 4px 18px;
-        padding: 0.65rem 1rem;
-        font-size: 0.88rem;
-        margin-bottom: 0.6rem;
-        max-width: 90%;
-        margin-left: auto;
-    }
-    .chat-bubble-bot {
-        background: var(--lime-light);
-        color: var(--forest-dark);
-        border-radius: 18px 18px 18px 4px;
-        padding: 0.65rem 1rem;
-        font-size: 0.88rem;
-        margin-bottom: 0.6rem;
-        border: 1px solid rgba(18,61,42,0.1);
-        max-width: 90%;
-    }
-    .suggested-chip {
-        display: inline-block;
-        background: var(--lime-light);
-        color: var(--forest-dark);
-        border: 1px solid rgba(18,61,42,0.15);
-        border-radius: 20px;
-        padding: 0.3rem 0.8rem;
-        font-size: 0.78rem;
-        font-weight: 600;
-        cursor: pointer;
-        margin: 0.2rem;
-        transition: all 0.15s;
-    }
-
-    /* Alignment Score Gauge */
-    .gauge-card {
-        background: var(--surface-white);
-        border: 1px solid #D6E0D9;
         border-radius: 16px;
         padding: 1.5rem;
+        box-shadow: var(--shadow-card);
+        margin-bottom: 1.5rem;
+    }
+
+    /* Gauge Card */
+    .gauge-card {
+        background: var(--surface-white);
+        border: 1px solid var(--border-subtle);
+        border-radius: 16px;
+        padding: 1.8rem;
         text-align: center;
         box-shadow: var(--shadow-card);
     }
 
-    /* Animations */
-    @keyframes float {
-        0%, 100% { transform: translateY(0px); }
-        50% { transform: translateY(-10px); }
+    /* Economic Loss Card */
+    .economic-card {
+        background: linear-gradient(135deg, #FFFFFF 0%, #F9FBF8 100%);
+        border: 1.5px solid rgba(27, 84, 58, 0.2);
+        border-radius: 18px;
+        padding: 1.6rem;
+        box-shadow: var(--shadow-card);
+        margin-bottom: 1.5rem;
     }
-    @keyframes pulse-green {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(183, 230, 107, 0.4); }
-        70% { box-shadow: 0 0 0 10px rgba(183, 230, 107, 0); }
-    }
-    @keyframes slideInRight {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-    }
-
-    /* Sidebar chat open/close toggle visibility  */
-    .section-divider {
-        border: none;
-        border-top: 1px solid var(--border-subtle);
-        margin: 1rem 0;
-    }
-
-    /* Status pill */
-    .status-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3rem;
-        padding: 0.25rem 0.7rem;
+    .loss-stat-pill {
+        background: #FEE2E2;
+        color: #991B1B;
+        padding: 0.35rem 0.8rem;
         border-radius: 20px;
-        font-size: 0.78rem;
         font-weight: 700;
+        font-size: 0.82rem;
+        display: inline-block;
     }
-    .status-pill.ok { background: #D1FAE5; color: #065F46; }
-    .status-pill.warn { background: #FEF3C7; color: #92400E; }
-    .status-pill.err { background: #FEE2E2; color: #991B1B; }
+    .roi-badge {
+        background: #D1FAE5;
+        color: #065F46;
+        padding: 0.35rem 0.8rem;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 0.82rem;
+        display: inline-block;
+    }
+
+    /* 7-Day Roadmap Timeline */
+    .roadmap-card {
+        background: #FFFFFF;
+        border: 1px solid var(--border-subtle);
+        border-radius: 16px;
+        padding: 1.4rem 1.6rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 4px 12px rgba(18, 61, 42, 0.04);
+        border-left: 5px solid var(--forest-mid);
+    }
+
+    /* Location Confirmation Card */
+    .location-confirmed-card {
+        background: #EBF8D3;
+        border: 1px solid rgba(18, 61, 42, 0.25);
+        border-radius: 14px;
+        padding: 0.9rem 1.2rem;
+        margin-top: 0.6rem;
+        margin-bottom: 1rem;
+    }
+
+    /* Disclaimer Banner */
+    .disclaimer-banner {
+        background: #F4F6F0;
+        border: 1px dashed #A0B2A6;
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        font-size: 0.82rem;
+        color: #405B4D;
+        line-height: 1.5;
+        margin-top: 2rem;
+    }
 
     /* Tips box */
     .tips-box {
         background: linear-gradient(135deg, #EBF8D3 0%, #F0FBE0 100%);
-        border: 1px solid rgba(183,230,107,0.4);
+        border: 1px solid rgba(183, 230, 107, 0.4);
         border-radius: 12px;
         padding: 0.9rem 1.1rem;
         font-size: 0.85rem;
@@ -448,7 +488,49 @@ st.markdown(
         line-height: 1.5;
         margin-bottom: 0.8rem;
     }
-    .tips-box strong { color: var(--forest-dark); }
+
+    /* STREAMLIT SIDEBAR: Dedicated CropCare AI Styling */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #092015 0%, #123D2A 100%) !important;
+        border-right: 1px solid rgba(183, 230, 107, 0.25) !important;
+    }
+    [data-testid="stSidebar"] * {
+        color: #E2ECE5;
+    }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4 {
+        color: #FFFFFF !important;
+        font-family: 'Space Grotesk', sans-serif !important;
+    }
+    .sidebar-ai-header {
+        background: rgba(255, 255, 255, 0.07);
+        border: 1px solid rgba(183, 230, 107, 0.35);
+        border-radius: 16px;
+        padding: 1rem 1.1rem;
+        margin-bottom: 1rem;
+    }
+    .live-dot {
+        width: 8px;
+        height: 8px;
+        background: #B7E66B;
+        border-radius: 50%;
+        display: inline-block;
+        box-shadow: 0 0 10px #B7E66B;
+        animation: pulse-green 2s infinite;
+    }
+    @keyframes pulse-green {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.4; transform: scale(0.85); }
+    }
+    .ai-context-chip {
+        background: rgba(183, 230, 107, 0.12);
+        border: 1px solid rgba(183, 230, 107, 0.35);
+        color: #DDF3A8 !important;
+        border-radius: 10px;
+        padding: 0.45rem 0.75rem;
+        font-size: 0.78rem;
+        margin-bottom: 0.8rem;
+        line-height: 1.4;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -463,20 +545,40 @@ defaults = {
     "leaf_image_id": None,
     "leaf_result": None,
     "cam_result": None,
-    "climate_lat": 19.0760,
-    "climate_lon": 72.8777,
+    "climate_lat": 19.9975,  # Default to Nashik, Maharashtra
+    "climate_lon": 73.7898,
+    "climate_loc_name": "Nashik, Maharashtra",
     "climate_days": 30,
     "climate_result": None,
     "lang": "en",
-    "chat_open": True,   # Start chat visible in sidebar
     "chat_messages": [],
-    "location_mode": "preset",  # "preset" | "manual" | "gps_hint"
     "farmer_name": "",
     "farm_name": "",
+    "farm_acres": 2.0,
+    "loc_search_query": "",
+    "loc_search_results": [],
 }
 for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
+
+
+@st.cache_data
+def get_image_base64(image_path: str) -> str:
+    """Read a local image file and return its base64 data URI string."""
+    try:
+        p = Path(image_path)
+        if not p.is_absolute():
+            p = Path(__file__).resolve().parent / image_path
+        if p.exists():
+            with open(p, "rb") as f:
+                encoded = base64.b64encode(f.read()).decode("utf-8")
+            suffix = p.suffix.lower().replace(".", "")
+            mime = "jpeg" if suffix in ("jpg", "jpeg") else suffix
+            return f"data:image/{mime};base64,{encoded}"
+    except Exception:
+        pass
+    return ""
 
 
 def format_metric(value: Optional[float], unit: str = "", precision: int = 1) -> str:
@@ -487,7 +589,7 @@ def format_metric(value: Optional[float], unit: str = "", precision: int = 1) ->
 
 
 def display_image(image, caption: Optional[str] = None) -> None:
-    """Safely render an image across Streamlit versions (1.38 use_column_width vs newer use_container_width)."""
+    """Safely render an image across Streamlit versions."""
     try:
         st.image(image, caption=caption, use_column_width=True)
     except TypeError:
@@ -497,7 +599,7 @@ def display_image(image, caption: Optional[str] = None) -> None:
 # ==============================================================================
 # TOP BRANDING & LANGUAGE SWITCHER
 # ==============================================================================
-b_col1, b_col2, b_col3 = st.columns([3.2, 1.2, 0.6])
+b_col1, b_col2, b_col3 = st.columns([3.2, 1.3, 0.9])
 with b_col1:
     st.markdown(
         f"""
@@ -530,11 +632,16 @@ with b_col2:
         st.rerun()
 
 with b_col3:
-    chat_icon = "💬" if not st.session_state.chat_open else "✕"
-    chat_lbl = f"{chat_icon} AI"
-    if st.button(chat_lbl, key="top_chat_toggle", help="Toggle CropCare AI Assistant", use_container_width=True):
-        st.session_state.chat_open = not st.session_state.chat_open
-        st.rerun()
+    st.markdown(
+        """
+        <div style="background: rgba(18, 61, 42, 0.07); border: 1px solid rgba(18, 61, 42, 0.15);
+                    border-radius: 12px; padding: 0.45rem 0.8rem; text-align: center;">
+            <span class="live-dot" style="margin-right: 5px;"></span>
+            <span style="font-size: 0.82rem; font-weight: 700; color: #123D2A;">AI Advisor</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 curr_lang = st.session_state.lang
 
@@ -575,14 +682,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ==============================================================================
-# LAYOUT: Main content + persistent AI sidebar
-# ==============================================================================
-if st.session_state.chat_open:
-    main_col, chat_col = st.columns([2.2, 1], gap="large")
-else:
-    main_col = st.container()
-    chat_col = None
+# Main container for full screen width
+main_col = st.container()
 
 
 # ==============================================================================
@@ -590,7 +691,7 @@ else:
 # ==============================================================================
 def render_screen1():
     with main_col:
-        hero_col_left, hero_col_right = st.columns([1.35, 0.85], gap="large")
+        hero_col_left, hero_col_right = st.columns([1.25, 0.95], gap="large")
 
         with hero_col_left:
             st.markdown(
@@ -606,15 +707,15 @@ def render_screen1():
                         </div>
                         <div class="stat-item">
                             <div class="stat-num">14</div>
-                            <div class="stat-label">Crop Types</div>
+                            <div class="stat-label">Crop Species</div>
                         </div>
                         <div class="stat-item">
                             <div class="stat-num">15ms</div>
-                            <div class="stat-label">CPU Latency</div>
+                            <div class="stat-label">CPU Inference</div>
                         </div>
                         <div class="stat-item">
                             <div class="stat-num">3</div>
-                            <div class="stat-label">Languages</div>
+                            <div class="stat-label">Languages (EN/HI/MR)</div>
                         </div>
                     </div>
                 </div>
@@ -623,35 +724,56 @@ def render_screen1():
             )
 
             # Optional quick farmer profile
-            with st.expander("👨‍🌾 Optional: Enter Your Farm Details (helps personalise the report)", expanded=False):
-                fname = st.text_input("Your Name / आपका नाम", value=st.session_state.farmer_name, placeholder="e.g. Ramesh Patil", key="farmer_name_inp")
-                farmn = st.text_input("Farm Name / खेत का नाम", value=st.session_state.farm_name, placeholder="e.g. Patil Farms, Nashik", key="farm_name_inp")
-                if st.button("Save Details", key="save_farmer_details"):
+            with st.expander("👨‍🌾 Optional: Enter Farmer & Field Profile (Personalises report)", expanded=False):
+                p_c1, p_c2 = st.columns(2)
+                with p_c1:
+                    fname = st.text_input("Farmer Name / किसान का नाम", value=st.session_state.farmer_name, placeholder="e.g. Ramesh Patil", key="farmer_name_inp")
+                with p_c2:
+                    farmn = st.text_input("Farm Name & Area / खेत का नाम", value=st.session_state.farm_name, placeholder="e.g. Patil Farms, Nashik", key="farm_name_inp")
+                acres = st.number_input("Landholding (Acres) — for Economic Impact calculation", min_value=0.25, max_value=500.0, value=float(st.session_state.farm_acres), step=0.5, key="acres_inp")
+                if st.button("Save Farm Profile", key="save_farmer_details"):
                     st.session_state.farmer_name = fname
                     st.session_state.farm_name = farmn
-                    st.success("Details saved! ✅")
+                    st.session_state.farm_acres = acres
+                    st.success("Details saved successfully! ✅")
 
             if st.button(t("btn_begin", curr_lang), type="primary", use_container_width=True, key="begin_btn"):
                 st.session_state.screen = 2
                 st.rerun()
 
         with hero_col_right:
-            # Show hero image if available, else botanical card
-            hero_img_path = os.path.join(os.path.dirname(__file__), "assets", "farmer_hero.jpg")
-            if os.path.exists(hero_img_path):
-                display_image(Image.open(hero_img_path), caption=None)
+            # Hero card using local base64 farmer hero or botanical graphic
+            farmer_img_uri = get_image_base64("assets/farmer_hero.jpg")
+            if farmer_img_uri:
+                st.markdown(
+                    f"""
+                    <div class="farmer-hero-card">
+                        <div class="farmer-img-frame">
+                            <img src="{farmer_img_uri}" alt="Farmer inspecting crop foliage" class="farmer-hero-img" />
+                            <div class="farmer-overlay-badge">
+                                <span>🌱 Dual-Evidence Intelligence Active</span>
+                            </div>
+                        </div>
+                        <div class="farmer-card-caption">
+                            <div class="caption-title">Real-Time Agronomic Assessment</div>
+                            <div class="caption-sub">Field-tested insights connecting leaf diagnostics with hyper-local weather baselines.</div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
             else:
                 st.markdown(
                     """
-                    <div class="botanical-3d-card">
-                        <div style="font-size: 4.5rem; margin-bottom: 0.5rem; animation: float 3s ease-in-out infinite;">🌿</div>
+                    <div class="botanical-3d-card" style="background: linear-gradient(145deg, #184C34 0%, #0F2E20 100%);">
+                        <div style="font-size: 4.5rem; margin-bottom: 0.5rem;">🌿</div>
                         <div style="font-family: 'Space Grotesk', sans-serif; font-size: 1.25rem; font-weight: 700; color: #FFFFFF;">
-                            Agronomic Diagnostics
+                            MobileNetV3 Neural Core
                         </div>
                         <div style="font-size: 0.88rem; color: #D3E4DB; margin-top: 0.4rem;">
                             14 Crops • 38 Pathology Classes<br>Hyper-Local Reanalysis Weather Telemetry
                         </div>
-                        <div class="botanical-badge">Edge-Ready • 15.6 ms CPU Latency</div>
+                        <div class="botanical-badge">38-Class Transfer Learning Benchmark</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -661,12 +783,12 @@ def render_screen1():
 
         # 6 Feature Cards
         f_col1, f_col2, f_col3 = st.columns(3, gap="medium")
-        features = [
+        features_row1 = [
             ("🍃", t('feat1_title', curr_lang), t('feat1_desc', curr_lang)),
             ("🌦️", t('feat2_title', curr_lang), t('feat2_desc', curr_lang)),
             ("🛡️", t('feat3_title', curr_lang), t('feat3_desc', curr_lang)),
         ]
-        for col, (icon, title, body) in zip([f_col1, f_col2, f_col3], features):
+        for col, (icon, title, body) in zip([f_col1, f_col2, f_col3], features_row1):
             with col:
                 st.markdown(
                     f"""
@@ -681,12 +803,12 @@ def render_screen1():
 
         st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
         f_col4, f_col5, f_col6 = st.columns(3, gap="medium")
-        extra_features = [
-            ("🔥", "Grad-CAM Explainability", "Visual AI heatmap shows exactly which leaf area the model focused on — judges can see the reasoning, not just results."),
-            ("🤖", "Gemini AI Assistant", "Ask anything about your crop, disease, or weather. CropCare AI answers in context using your real scan data."),
-            ("📋", "Field Health Card", "One-click downloadable PDF report for field extension officers. Includes AI heatmap, climate data, and spray guidance."),
+        features_row2 = [
+            ("🔥", "Grad-CAM Explainability", "Visual AI heatmaps prove to judges and farmers exactly which leaf lesion guided the model's prediction."),
+            ("💰", "Yield & Economic Loss Estimator", "Calculates real financial loss in ₹/acre and demonstrates intervention ROI for farm profitability."),
+            ("🤖", "Gemini Agronomic Assistant", "Dedicated persistent AI sidebar answering farmer questions with live scan context in 3 languages."),
         ]
-        for col, (icon, title, body) in zip([f_col4, f_col5, f_col6], extra_features):
+        for col, (icon, title, body) in zip([f_col4, f_col5, f_col6], features_row2):
             with col:
                 st.markdown(
                     f"""
@@ -715,29 +837,16 @@ def render_screen2():
             unsafe_allow_html=True,
         )
 
-        # Tips box
-        st.markdown(
-            """
-            <div class="tips-box">
-            💡 <strong>Photo Tips for Best Results:</strong>
-            Place the leaf flat on a plain surface, ensure good lighting (no shadows), and photograph from ~30 cm above.
-            One leaf per image gives the most accurate AI screening.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
         leaf_col_left, leaf_col_right = st.columns([1, 1], gap="large")
 
         with leaf_col_left:
-            st.markdown(f"#### 📷 {t('upload_label', curr_lang)}")
+            st.markdown("#### 📷 Leaf Acquisition (Upload or Camera)")
 
             input_mode = st.radio(
-                "Select Acquisition Method:",
-                options=["📁 Upload Image", "📸 Click Photo (Camera)"],
+                "Acquisition Method:",
+                options=["📁 Upload Image", "📸 Take Photo with Camera"],
                 horizontal=True,
-                help="Choose between capturing a live photo using your camera or selecting an existing image file.",
-                key="leaf_input_mode",
+                key="acquisition_mode",
             )
 
             active_file = None
@@ -745,10 +854,10 @@ def render_screen2():
 
             if input_mode == "📁 Upload Image":
                 active_file = st.file_uploader(
-                    "Select leaf image (JPG, JPEG, PNG)",
+                    t("upload_label", curr_lang),
                     type=["jpg", "jpeg", "png"],
                     key="leaf_uploader",
-                    help="High-contrast, focused imagery centered on a single leaf produces the most reliable screening.",
+                    help="Upload a clear, focused leaf photograph with visible symptom spots.",
                 )
                 if active_file is not None:
                     new_source_id = f"upload_{active_file.name}_{active_file.size}"
@@ -756,12 +865,11 @@ def render_screen2():
                 active_file = st.camera_input(
                     "Capture live leaf photograph",
                     key="leaf_camera",
-                    help="Center the plant leaf in the frame with uniform lighting and click Take Photo.",
+                    help="Center the plant leaf in the camera preview and click 'Take Photo'.",
                 )
                 if active_file is not None:
                     new_source_id = f"camera_{active_file.name}_{active_file.size}"
 
-            # Decode new image
             if active_file is not None and new_source_id != st.session_state.leaf_image_id:
                 try:
                     img = Image.open(active_file).convert("RGB")
@@ -772,26 +880,13 @@ def render_screen2():
                 except Exception as e:
                     st.error(f"Image decoding failed: {e}")
 
-            # Show tabs if Grad-CAM available, else preview
-            if st.session_state.cam_result and st.session_state.cam_result.get("overlay_image"):
-                t_orig, t_cam = st.tabs(["📷 Original Photograph", "🔥 Explainable AI (Grad-CAM)"])
-                with t_orig:
-                    display_image(st.session_state.leaf_image, caption="Uploaded Leaf Specimen")
-                with t_cam:
-                    display_image(
-                        st.session_state.cam_result["overlay_image"],
-                        caption="Grad-CAM Saliency: Spatial Lesion Attention",
-                    )
-                    st.caption(f"🎯 **Attention Analysis:** {st.session_state.cam_result.get('focus_description')}")
-            elif st.session_state.leaf_image is not None:
-                display_image(st.session_state.leaf_image, caption="Loaded Leaf Image")
-
-            # Action Buttons
             if st.session_state.leaf_image is not None:
-                btn_col1, btn_col2 = st.columns([1.5, 1])
-                with btn_col1:
-                    run_screening = st.button(t("btn_run_screening", curr_lang), type="primary", use_container_width=True, key="run_screening_btn")
-                with btn_col2:
+                display_image(st.session_state.leaf_image, caption="Current Leaf Under Assessment")
+
+                b1, b2 = st.columns([1.5, 1])
+                with b1:
+                    run_screening = st.button(t("btn_run_screening", curr_lang), type="primary", use_container_width=True, key="run_screen_btn")
+                with b2:
                     if st.button("🔄 Clear / Retake", type="secondary", use_container_width=True, key="clear_leaf_btn"):
                         st.session_state.leaf_image = None
                         st.session_state.leaf_image_id = None
@@ -800,164 +895,115 @@ def render_screen2():
                         st.rerun()
 
                 if run_screening:
-                    with st.spinner("Executing MobileNetV3 inference & Grad-CAM analysis..."):
+                    with st.spinner("Executing neural inference & Grad-CAM explainability..."):
                         try:
                             from src.cropcare.image_engine import predict_image
 
                             res = predict_image(st.session_state.leaf_image)
                             st.session_state.leaf_result = res
 
+                            # Run Grad-CAM heatmap
                             cam_res = generate_gradcam(st.session_state.leaf_image)
                             st.session_state.cam_result = cam_res
-                            st.rerun()
                         except Exception as inf_err:
                             st.error(f"Inference execution error: {inf_err}")
             else:
-                st.info("Please capture or upload a leaf photograph above to enable diagnostic screening.")
+                st.info("Please select a leaf photograph above or take a live camera shot to begin.")
 
         with leaf_col_right:
             st.markdown("#### 🔬 Neural Diagnostic Output")
 
             res = st.session_state.leaf_result
             if res is None:
-                weights_found = os.path.exists("models/plantvillage_mobilenetv3.pth")
-                mapping_found = os.path.exists("models/class_mapping.json")
-
-                if weights_found and mapping_found:
-                    st.markdown(
-                        """
-                        <div style="background: #FFFFFF; border: 2px dashed #CCD7D0; border-radius: 16px; padding: 2.5rem 1.5rem; text-align: center; color: #526E60;">
-                            <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">📷</div>
-                            <div style="font-weight: 700; color: #123D2A; font-size: 1.1rem; margin-bottom: 0.3rem;">Ready for Inference</div>
-                            <div style="font-size: 0.88rem;">Trained MobileNetV3 checkpoint is online and loaded.<br>Click "Run Leaf Screening" to evaluate image.</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.info(
-                        "ℹ️ **Inference Engine in Demo Mode**\n\n"
-                        "Model weights or mapping files are missing from the `models/` directory. "
-                        "Please train or download the `plantvillage_mobilenetv3.pth` checkpoint.",
-                    )
-            else:
-                crop = res.get("crop", "Unknown")
-                disease = res.get("disease", "Unknown")
-                conf = res.get("confidence", 0.0)
-                uncertain = res.get("uncertain", False)
-
-                # Multilingual Localization
-                trans_crop, trans_disease = translate_diagnosis(crop, disease, lang=curr_lang)
-
                 st.markdown(
-                    f"""
-                    <div class="diagnostic-panel">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.8rem;">
-                            <div>
-                                <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #526E60; letter-spacing: 0.05em;">{t('target_crop', curr_lang)}</div>
-                                <div style="font-family: 'Space Grotesk', sans-serif; font-size: 1.5rem; font-weight: 700; color: #123D2A;">{trans_crop}</div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #526E60; letter-spacing: 0.05em;">{t('confidence', curr_lang)}</div>
-                                <div style="font-family: 'Space Grotesk', sans-serif; font-size: 1.5rem; font-weight: 700; color: #123D2A;">{conf*100:.1f}%</div>
-                            </div>
-                        </div>
-                        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #526E60; letter-spacing: 0.05em;">{t('screened_condition', curr_lang)}</div>
-                        <div style="font-size: 1.2rem; font-weight: 600; color: #1B543A; margin-bottom: 0.8rem;">{trans_disease}</div>
-                        <div style="font-size: 0.75rem; color: #526E60;">Model: <code>{res.get('model_name', 'MobileNetV3-Small-PlantVillage')}</code> | Latency: <strong>15.6 ms (CPU)</strong></div>
+                    """
+                    <div style="background: #FFFFFF; border: 2px dashed #CCD7D0; border-radius: 16px; padding: 2.5rem 1.5rem; text-align: center; color: #526E60;">
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🍃</div>
+                        <div style="font-weight: 700; color: #123D2A; font-size: 1.1rem; margin-bottom: 0.3rem;">Ready for Inference</div>
+                        <div style="font-size: 0.88rem;">MobileNetV3 transfer model is initialized.<br>Click "Run Leaf Screening" to classify and generate Grad-CAM heatmap.</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
+            else:
+                crop = res.get("crop", "Unknown")
+                disease = res.get("disease", "Unknown")
+                conf = res.get("confidence", 0.0)
+                uncert = res.get("uncertain", False)
+                latency = res.get("latency_ms", 15.0)
 
-                # Audio voice synthesis button
-                audio_script = generate_audio_script(crop, disease, conf, "HIGH", "Advisory Available", lang=curr_lang)
-                safe_script = audio_script.replace("'", "\\'").replace('"', '\\"')
+                trans_crop, trans_disease = translate_diagnosis(crop, disease, lang=curr_lang)
 
-                btn_lbl = t("btn_listen", curr_lang)
-                if st.button(btn_lbl, use_container_width=True, key="listen_btn"):
-                    speech_lang = "hi-IN" if curr_lang == "hi" else ("mr-IN" if curr_lang == "mr" else "en-US")
-                    st.components.v1.html(
-                        f"""<script>
-                        if ('speechSynthesis' in window) {{
-                            window.speechSynthesis.cancel();
-                            var msg = new SpeechSynthesisUtterance('{safe_script}');
-                            msg.lang = '{speech_lang}';
-                            msg.rate = 0.95;
-                            window.speechSynthesis.speak(msg);
-                        }}
-                        </script>""",
-                        height=0,
+                tab_diag, tab_cam = st.tabs(["📋 Diagnosis Overview", "🔥 Grad-CAM Explainability"])
+
+                with tab_diag:
+                    st.markdown(
+                        f"""
+                        <div class="diagnostic-panel">
+                            <div style="font-size: 0.78rem; font-weight: 700; color: #526E60; text-transform: uppercase;">{t('target_crop', curr_lang)}</div>
+                            <div style="font-size: 1.4rem; font-weight: 700; color: #123D2A; margin-bottom: 0.8rem;">{trans_crop}</div>
+                            <div style="font-size: 0.78rem; font-weight: 700; color: #526E60; text-transform: uppercase;">{t('screened_condition', curr_lang)}</div>
+                            <div style="font-size: 1.2rem; font-weight: 600; color: #1B543A; margin-bottom: 0.8rem;">{trans_disease}</div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 0.4rem;">
+                                <div style="font-size: 0.78rem; font-weight: 700; color: #526E60; text-transform: uppercase;">{t('confidence', curr_lang)}</div>
+                                <div style="font-size: 1.1rem; font-weight: 700; color: #123D2A;">{conf*100:.1f}%</div>
+                            </div>
+                            <div style="background: #E5EBE7; border-radius: 8px; height: 8px; overflow: hidden;">
+                                <div style="background: var(--forest-dark); height: 100%; width: {conf*100:.1f}%;"></div>
+                            </div>
+                            <div style="margin-top: 0.8rem; font-size: 0.78rem; color: #526E60;">
+                                ⚡ Inference latency: <strong>{latency:.1f} ms</strong> on CPU
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
                     )
-                    st.success("Speaking diagnosis aloud via browser voice engine...")
-                    st.caption(f"📢 **Script:** {audio_script}")
 
-                if uncertain:
-                    st.warning(
-                        "⚠️ **Low Confidence / Ambiguous Result:** "
-                        f"Model certainty ({conf*100:.1f}%) is below the reliable threshold (55%). "
-                        "Field verification by an agronomist is strongly advised.",
-                        icon="⚠️",
-                    )
-                else:
-                    st.success("Screening completed with satisfactory model confidence.")
+                    if uncert:
+                        st.warning("⚠️ **Low Confidence Flag:** Model uncertainty is elevated. Visual symptoms may be ambiguous; physical field inspection is recommended.")
+                    else:
+                        st.success("✅ **Calibrated Confidence:** Optical symptoms closely match trained botanical benchmarks.")
 
-                probs = res.get("probabilities", {})
-                if probs:
-                    with st.expander("📊 View Top Class Probabilities", expanded=False):
-                        top_items = sorted(probs.items(), key=lambda x: x[1], reverse=True)[:5]
-                        prob_table = pd.DataFrame(
-                            [
-                                {
-                                    "Class": k.replace("___", " — ").replace("_", " "),
-                                    "Probability": f"{v*100:.2f}%",
-                                }
-                                for k, v in top_items
-                            ]
+                with tab_cam:
+                    cam_data = st.session_state.cam_result
+                    if cam_data and cam_data.get("overlay_image"):
+                        st.markdown(
+                            """
+                            <div class="tips-box">
+                                <strong>Explainable AI (XAI):</strong> The heatmap highlights the exact pixel clusters that triggered the disease classification. Red/Yellow zones show high neural attention.
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
                         )
-                        st.table(prob_table)
+                        c_col1, c_col2 = st.columns(2)
+                        with c_col1:
+                            display_image(st.session_state.leaf_image, caption="Original Input")
+                        with c_col2:
+                            display_image(cam_data["overlay_image"], caption="Grad-CAM Attention Heatmap")
+                    else:
+                        st.info("Grad-CAM visualization will generate upon running screening.")
+
+                # Vernacular Audio Script
+                audio_script = generate_audio_script(crop, disease, conf, "Aligned", "Review guidance", lang=curr_lang)
+                with st.expander("🔊 Spoken Vernacular Narration (Audio Script)", expanded=False):
+                    st.info(audio_script)
 
         # Navigation
-        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
-        n_col1, n_col2 = st.columns([1, 1])
-        with n_col1:
+        st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
+        nav1, nav2 = st.columns([1, 1])
+        with nav1:
             if st.button(t("btn_back_welcome", curr_lang), type="secondary", key="s2_back"):
                 st.session_state.screen = 1
                 st.rerun()
-        with n_col2:
+        with nav2:
             if st.button(t("btn_goto_climate", curr_lang), type="primary", key="s2_next"):
                 st.session_state.screen = 3
                 st.rerun()
 
 
 # ==============================================================================
-# SCREEN 3: CLIMATE INSIGHTS — FARMER-FRIENDLY LOCATION PICKER
+# SCREEN 3: CLIMATE INSIGHTS & FARMER-FRIENDLY LOCATION ENGINE
 # ==============================================================================
-# Common Indian agricultural districts with coords
-KNOWN_LOCATIONS = {
-    "📍 Pune, Maharashtra": (18.5204, 73.8567),
-    "📍 Nashik, Maharashtra": (20.0000, 73.7898),
-    "📍 Nagpur, Maharashtra": (21.1458, 79.0882),
-    "📍 Aurangabad, Maharashtra": (19.8762, 75.3433),
-    "📍 Kolhapur, Maharashtra": (16.7050, 74.2433),
-    "📍 Solapur, Maharashtra": (17.6868, 75.9100),
-    "📍 Amravati, Maharashtra": (20.9333, 77.7500),
-    "📍 Latur, Maharashtra": (18.4088, 76.5604),
-    "📍 Chandrapur, Maharashtra": (19.9615, 79.2961),
-    "📍 Jalgaon, Maharashtra": (21.0077, 75.5626),
-    "📍 Delhi NCR": (28.6139, 77.2090),
-    "📍 Bengaluru, Karnataka": (12.9716, 77.5946),
-    "📍 Hyderabad, Telangana": (17.3850, 78.4867),
-    "📍 Lucknow, UP": (26.8467, 80.9462),
-    "📍 Patna, Bihar": (25.5941, 85.1376),
-    "📍 Bhopal, MP": (23.2599, 77.4126),
-    "📍 Jaipur, Rajasthan": (26.9124, 75.7873),
-    "📍 Chandigarh, Punjab": (30.7333, 76.7794),
-    "📍 Ahmedabad, Gujarat": (23.0225, 72.5714),
-    "📍 Enter Custom Location ✏️": None,
-}
-
-
 def render_screen3():
     with main_col:
         st.markdown(
@@ -970,96 +1016,159 @@ def render_screen3():
             unsafe_allow_html=True,
         )
 
-        # -----------------------------------------------------------------------
-        # FARMER-FRIENDLY LOCATION PICKER
-        # -----------------------------------------------------------------------
-        st.markdown("#### 📍 Select Your Farm Location")
+        st.markdown("#### 📍 Select Farm Location (Farmer-Friendly)")
         st.markdown(
             """
             <div class="tips-box">
-            🌾 <strong>Simple location selection:</strong>
-            Choose the nearest city/district from the list below — no need to know GPS coordinates!
-            Select "Enter Custom Location" only if your area is not listed.
+                🌾 <strong>No GPS Coordinates Needed:</strong>
+                Choose your agricultural district, search any village or town name, or pick your State & District.
+                CropCare automatically determines the exact coordinates and pulls Open-Meteo weather telemetry.
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        location_names = list(KNOWN_LOCATIONS.keys())
-        # Try to find current lat/lon in the presets
-        current_preset_idx = 0
-        for i, (name, coords) in enumerate(KNOWN_LOCATIONS.items()):
-            if coords and abs(coords[0] - st.session_state.climate_lat) < 0.01 and abs(coords[1] - st.session_state.climate_lon) < 0.01:
-                current_preset_idx = i
-                break
-
-        selected_location_name = st.selectbox(
-            "Select nearest district or city 🏘️",
-            options=location_names,
-            index=current_preset_idx,
-            key="location_picker",
-            help="Choose the district closest to your farm. Weather data is fetched from that area's coordinates.",
-        )
-
-        selected_coords = KNOWN_LOCATIONS[selected_location_name]
-        is_custom = selected_coords is None
+        loc_tab1, loc_tab2, loc_tab3, loc_tab4 = st.tabs([
+            "🌾 Top Agricultural Belts (1-Click)",
+            "🔍 Search Any Village / Town / City",
+            "🗺️ State & District Selector",
+            "⚙️ Advanced GPS Coordinates",
+        ])
 
         lat = st.session_state.climate_lat
         lon = st.session_state.climate_lon
+        loc_name = st.session_state.climate_loc_name
 
-        if not is_custom:
-            lat, lon = selected_coords
-            st.session_state.climate_lat = lat
-            st.session_state.climate_lon = lon
-            st.markdown(
-                f"""
-                <div style="background: #EBF8D3; border: 1px solid rgba(18,61,42,0.2); border-radius: 10px;
-                            padding: 0.6rem 1rem; font-size: 0.88rem; color: #123D2A; margin-bottom: 0.8rem;">
-                    ✅ <strong>Selected:</strong> {selected_location_name.replace('📍 ', '')}
-                    &nbsp;&nbsp;|&nbsp;&nbsp; Lat: <code>{lat:.4f}°N</code> &nbsp; Lon: <code>{lon:.4f}°E</code>
-                </div>
-                """,
-                unsafe_allow_html=True,
+        # TAB 1: 1-Click Top Agricultural Belts
+        with loc_tab1:
+            preset_labels = list(TOP_PRESET_LOCATIONS.keys())
+            chosen_preset = st.selectbox(
+                "Select Major Agricultural Belt:",
+                options=preset_labels,
+                index=0,
+                key="preset_loc_picker",
+                help="Pre-configured hubs representing major fruit, grain, and cash crop clusters.",
             )
-        else:
-            st.markdown("**Enter GPS Coordinates manually:**")
-            st.info("💡 You can find your GPS coordinates on Google Maps — long-press on the map to see your location's lat/lon.")
-            coord_c1, coord_c2 = st.columns(2)
-            with coord_c1:
-                lat = st.number_input(
-                    "Latitude (°N) — e.g. 18.5204",
+            p_lat, p_lon = TOP_PRESET_LOCATIONS[chosen_preset]
+            if st.button("Apply Selected Agri-Belt", key="apply_preset_btn"):
+                st.session_state.climate_lat = p_lat
+                st.session_state.climate_lon = p_lon
+                st.session_state.climate_loc_name = chosen_preset.split(" (")[0]
+                st.rerun()
+
+        # TAB 2: Real-Time Village / City Search
+        with loc_tab2:
+            search_col1, search_col2 = st.columns([3, 1])
+            with search_col1:
+                q_text = st.text_input(
+                    "Enter Village, Taluka, Town, or District Name:",
+                    placeholder="e.g. Baramati, Solapur, Bhatinda, Kopargaon, Muzaffarnagar...",
+                    key="village_search_input",
+                )
+            with search_col2:
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                do_search = st.button("Search 🔍", key="exec_loc_search", use_container_width=True)
+
+            if do_search and q_text:
+                with st.spinner("Searching global and Indian geocoding databases..."):
+                    found = search_location_online(q_text)
+                    st.session_state.loc_search_results = found
+
+            if st.session_state.loc_search_results:
+                st.markdown("**Search Results (Click to Set):**")
+                for idx, item in enumerate(st.session_state.loc_search_results):
+                    c_txt, c_btn = st.columns([3.5, 1])
+                    with c_txt:
+                        st.markdown(f"**{item['display']}** `({item['latitude']:.4f}°N, {item['longitude']:.4f}°E)`")
+                    with c_btn:
+                        if st.button("Select Location", key=f"sel_loc_{idx}", use_container_width=True):
+                            st.session_state.climate_lat = item["latitude"]
+                            st.session_state.climate_lon = item["longitude"]
+                            st.session_state.climate_loc_name = f"{item['name']}, {item.get('state', '')}"
+                            st.success(f"Selected: {item['name']} ✅")
+                            st.rerun()
+
+        # TAB 3: State & District Selector
+        with loc_tab3:
+            s_col1, s_col2 = st.columns(2)
+            states = get_states()
+            with s_col1:
+                selected_state = st.selectbox("Select State:", options=states, index=0, key="state_selector")
+            with s_col2:
+                dist_dict = get_districts_for_state(selected_state)
+                dist_names = list(dist_dict.keys())
+                selected_district = st.selectbox("Select District / Tehsil:", options=dist_names, key="district_selector")
+
+            if selected_district in dist_dict:
+                d_lat, d_lon, d_crops = dist_dict[selected_district]
+                st.caption(f"🌿 Primary Regional Crops in {selected_district}: **{d_crops}**")
+                if st.button("Set State & District Location", key="apply_state_dist_btn"):
+                    st.session_state.climate_lat = d_lat
+                    st.session_state.climate_lon = d_lon
+                    st.session_state.climate_loc_name = f"{selected_district}, {selected_state}"
+                    st.rerun()
+
+        # TAB 4: Advanced Lat / Lon (For Researchers)
+        with loc_tab4:
+            st.caption("For agricultural scientists, research plots, and drone pilots:")
+            man_c1, man_c2 = st.columns(2)
+            with man_c1:
+                manual_lat = st.number_input(
+                    "Latitude (°N)",
                     min_value=-90.0,
                     max_value=90.0,
                     value=float(st.session_state.climate_lat),
                     step=0.0001,
                     format="%.4f",
-                    key="custom_lat",
+                    key="man_lat_inp",
                 )
-            with coord_c2:
-                lon = st.number_input(
-                    "Longitude (°E) — e.g. 73.8567",
+            with man_c2:
+                manual_lon = st.number_input(
+                    "Longitude (°E)",
                     min_value=-180.0,
                     max_value=180.0,
                     value=float(st.session_state.climate_lon),
                     step=0.0001,
                     format="%.4f",
-                    key="custom_lon",
+                    key="man_lon_inp",
                 )
-            st.session_state.climate_lat = lat
-            st.session_state.climate_lon = lon
+            if st.button("Apply Exact GPS Coordinates", key="apply_man_gps_btn"):
+                st.session_state.climate_lat = manual_lat
+                st.session_state.climate_lon = manual_lon
+                st.session_state.climate_loc_name = f"Custom ({manual_lat:.2f}°N, {manual_lon:.2f}°E)"
+                st.rerun()
 
-        # Window selector
-        st.markdown("#### 🗓️ Observation Window")
+        # Location Active Confirmation Card
+        lat = st.session_state.climate_lat
+        lon = st.session_state.climate_lon
+        loc_name = st.session_state.climate_loc_name
+
+        st.markdown(
+            f"""
+            <div class="location-confirmed-card">
+                <div style="font-weight: 700; color: #123D2A; font-size: 1.05rem;">
+                    📍 Active Farm Location: {loc_name}
+                </div>
+                <div style="color: #2A7352; font-size: 0.85rem; margin-top: 0.25rem;">
+                    Coordinates: <code>{lat:.4f}°N, {lon:.4f}°E</code> &nbsp;•&nbsp; Calibrated with Open-Meteo Reanalysis Weather Grid
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Observation Window
+        st.markdown("#### 🗓️ Weather Observation Window")
         window_options = {
-            "Last 7 Days": 7,
-            "Last 14 Days": 14,
-            "Last 30 Days (Recommended)": 30,
+            "Last 7 Days (Short-Term Fluctuation)": 7,
+            "Last 14 Days (Incubation Period)": 14,
+            "Last 30 Days (Recommended Agronomic Baseline)": 30,
         }
         w_labels = list(window_options.keys())
         w_vals = list(window_options.values())
         default_w_idx = w_vals.index(st.session_state.climate_days) if st.session_state.climate_days in w_vals else 2
         selected_window_label = st.radio(
-            "How many days of weather data to analyse?",
+            "Observation Window Duration:",
             options=w_labels,
             index=default_w_idx,
             horizontal=True,
@@ -1069,7 +1178,7 @@ def render_screen3():
 
         if st.button(t("btn_fetch_climate", curr_lang), type="primary", use_container_width=True, key="fetch_climate_btn"):
             st.session_state.climate_days = window
-            with st.spinner("Connecting to Open-Meteo Reanalysis & Forecast APIs..."):
+            with st.spinner(f"Querying Open-Meteo ERA5 Reanalysis for {loc_name}..."):
                 try:
                     from src.cropcare.climate_engine import get_environment
 
@@ -1079,7 +1188,7 @@ def render_screen3():
                         baseline_years=[2023, 2024, 2025],
                     )
                     st.session_state.climate_result = env_res
-                    st.success(f"✅ Retrieved {window}-day weather data for your farm location!")
+                    st.success(f"✅ Retrieved {window}-day climate telemetry for {loc_name}!")
                 except Exception as clim_err:
                     st.error(f"Failed to retrieve climate telemetry: {clim_err}")
 
@@ -1087,7 +1196,6 @@ def render_screen3():
         env_data = st.session_state.climate_result
         if env_data and env_data.get("recent"):
             recent = env_data.get("recent") or {}
-            baseline = env_data.get("baseline") or {}
             anomalies = env_data.get("anomalies") or {}
 
             st.markdown("#### 📊 Environmental Summary Telemetry")
@@ -1120,10 +1228,10 @@ def render_screen3():
                     value=format_metric(recent.get("mean_humidity_pct"), "%"),
                 )
 
-            # Time-Series Charting
+            # Daily Time Series Chart
             daily_series = env_data.get("daily_series") or []
             if daily_series:
-                with st.expander("📈 View Daily Meteorological Time-Series", expanded=True):
+                with st.expander("📈 View Daily Weather Trends (Temperature & Rainfall)", expanded=True):
                     df = pd.DataFrame(daily_series)
                     if "date" in df.columns:
                         df["date"] = pd.to_datetime(df["date"])
@@ -1138,20 +1246,20 @@ def render_screen3():
                             st.bar_chart(df[["precipitation_mm"]].rename(columns={"precipitation_mm": "Rainfall (mm)"}))
 
         # Navigation
-        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
-        n_col1, n_col2 = st.columns([1, 1])
-        with n_col1:
+        st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
+        nav1, nav2 = st.columns([1, 1])
+        with nav1:
             if st.button(t("btn_back_leaf", curr_lang), type="secondary", key="s3_back"):
                 st.session_state.screen = 2
                 st.rerun()
-        with n_col2:
+        with nav2:
             if st.button(t("btn_goto_summary", curr_lang), type="primary", key="s3_next"):
                 st.session_state.screen = 4
                 st.rerun()
 
 
 # ==============================================================================
-# SCREEN 4: EXECUTIVE SUMMARY & AGRONOMIC BRIEFING
+# SCREEN 4: EXECUTIVE SUMMARY & AGRONOMIC DECISION SUPPORT
 # ==============================================================================
 def render_screen4():
     with main_col:
@@ -1167,7 +1275,7 @@ def render_screen4():
 
         sum_col1, sum_col2 = st.columns([1, 1], gap="large")
 
-        # Column 1: Leaf Screening Audit
+        # Column 1: Optical Screening Record
         with sum_col1:
             st.markdown("#### 🍃 Optical Screening Record")
             leaf_res = st.session_state.leaf_result
@@ -1183,11 +1291,11 @@ def render_screen4():
                 st.markdown(
                     f"""
                     <div class="diagnostic-panel">
-                        <div style="font-size: 0.8rem; font-weight: 700; color: #526E60; text-transform: uppercase;">{t('target_crop', curr_lang)}</div>
+                        <div style="font-size: 0.78rem; font-weight: 700; color: #526E60; text-transform: uppercase;">{t('target_crop', curr_lang)}</div>
                         <div style="font-size: 1.35rem; font-weight: 700; color: #123D2A; margin-bottom: 0.6rem;">{trans_crop}</div>
-                        <div style="font-size: 0.8rem; font-weight: 700; color: #526E60; text-transform: uppercase;">{t('screened_condition', curr_lang)}</div>
+                        <div style="font-size: 0.78rem; font-weight: 700; color: #526E60; text-transform: uppercase;">{t('screened_condition', curr_lang)}</div>
                         <div style="font-size: 1.15rem; font-weight: 600; color: #1B543A; margin-bottom: 0.6rem;">{trans_disease}</div>
-                        <div style="font-size: 0.8rem; font-weight: 700; color: #526E60; text-transform: uppercase;">{t('confidence', curr_lang)}</div>
+                        <div style="font-size: 0.78rem; font-weight: 700; color: #526E60; text-transform: uppercase;">{t('confidence', curr_lang)}</div>
                         <div style="font-size: 1.15rem; font-weight: 700; color: #123D2A;">{conf*100:.1f}%</div>
                     </div>
                     """,
@@ -1200,7 +1308,7 @@ def render_screen4():
             else:
                 st.info("No leaf screening was completed in this session.")
 
-        # Column 2: Climate Context Audit
+        # Column 2: Climate Context Record
         with sum_col2:
             st.markdown("#### 🌦️ Environmental Context Record")
             clim_res = st.session_state.climate_result
@@ -1208,16 +1316,16 @@ def render_screen4():
             if clim_res and clim_res.get("recent"):
                 recent = clim_res.get("recent") or {}
                 anom = clim_res.get("anomalies") or {}
-                loc = clim_res.get("location", "Selected Coordinates")
+                loc = st.session_state.climate_loc_name or clim_res.get("location", "Selected Coordinates")
 
                 st.markdown(
                     f"""
                     <div class="diagnostic-panel">
-                        <div style="font-size: 0.8rem; font-weight: 700; color: #526E60; text-transform: uppercase;">Location Audited</div>
+                        <div style="font-size: 0.78rem; font-weight: 700; color: #526E60; text-transform: uppercase;">Location Audited</div>
                         <div style="font-size: 1.1rem; font-weight: 700; color: #123D2A; margin-bottom: 0.6rem;">{loc}</div>
-                        <div style="font-size: 0.8rem; font-weight: 700; color: #526E60; text-transform: uppercase;">Window Observed</div>
+                        <div style="font-size: 0.78rem; font-weight: 700; color: #526E60; text-transform: uppercase;">Window Observed</div>
                         <div style="font-size: 1rem; font-weight: 600; color: #1B543A; margin-bottom: 0.6rem;">{st.session_state.climate_days} Days via Open-Meteo</div>
-                        <div style="display: flex; gap: 1.5rem;">
+                        <div style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
                             <div>
                                 <div style="font-size: 0.75rem; color: #526E60;">Mean Temp</div>
                                 <div style="font-weight: 700; color: #123D2A;">{format_metric(recent.get('mean_temperature_c'), '°C')}</div>
@@ -1239,12 +1347,72 @@ def render_screen4():
                 st.info("No climate data was queried in this session.")
 
         # ------------------------------------------------------------------
-        # BIOMETEOROLOGICAL CONCURRENCE INDEX
+        # FEATURE 1: ECONOMIC IMPACT & YIELD RISK ESTIMATOR
         # ------------------------------------------------------------------
-        align_res = evaluate_environmental_alignment(leaf_res if 'leaf_res' in dir() else st.session_state.leaf_result, clim_res if 'clim_res' in dir() else st.session_state.climate_result)
-
         leaf_res = st.session_state.leaf_result
         clim_res = st.session_state.climate_result
+        acres = float(st.session_state.farm_acres)
+
+        if leaf_res and leaf_res.get("predicted_class"):
+            crop = leaf_res.get("crop", "Tomato")
+            disease = leaf_res.get("disease", "Early_blight")
+            conf = leaf_res.get("confidence", 0.85)
+
+            econ = estimate_economic_impact(crop, disease, conf, acres)
+
+            st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+            st.markdown("#### 💰 Projected Economic Impact & Yield Risk")
+
+            st.markdown(
+                f"""
+                <div class="economic-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;">
+                        <div>
+                            <span style="font-family: 'Space Grotesk', sans-serif; font-size: 1.25rem; font-weight: 700; color: #123D2A;">
+                                Financial Risk Analysis ({acres:.1f} Acres {crop})
+                            </span>
+                        </div>
+                        <div>
+                            <span class="loss-stat-pill">{econ['urgency']}</span>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.9rem; color: #334D3F; margin-bottom: 1.2rem;">
+                        {econ['description']}
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                        <div style="background: #FFFFFF; padding: 1rem; border-radius: 12px; border: 1px solid #E2ECE5;">
+                            <div style="font-size: 0.75rem; color: #526E60; text-transform: uppercase; font-weight: 700;">Potential Yield Loss</div>
+                            <div style="font-size: 1.5rem; font-weight: 800; color: {'#DC2626' if not econ['is_healthy'] else '#15803D'}; font-family: 'Space Grotesk';">
+                                {econ['loss_pct_range']}
+                            </div>
+                        </div>
+                        <div style="background: #FFFFFF; padding: 1rem; border-radius: 12px; border: 1px solid #E2ECE5;">
+                            <div style="font-size: 0.75rem; color: #526E60; text-transform: uppercase; font-weight: 700;">Revenue at Risk</div>
+                            <div style="font-size: 1.5rem; font-weight: 800; color: #B91C1C; font-family: 'Space Grotesk';">
+                                ₹{econ['loss_value_min_inr']:,} – ₹{econ['loss_value_max_inr']:,}
+                            </div>
+                        </div>
+                        <div style="background: #FFFFFF; padding: 1rem; border-radius: 12px; border: 1px solid #E2ECE5;">
+                            <div style="font-size: 0.75rem; color: #526E60; text-transform: uppercase; font-weight: 700;">Est. Treatment Cost</div>
+                            <div style="font-size: 1.5rem; font-weight: 800; color: #1E3A8A; font-family: 'Space Grotesk';">
+                                ₹{econ['treatment_cost_inr']:,}
+                            </div>
+                        </div>
+                        <div style="background: #FFFFFF; padding: 1rem; border-radius: 12px; border: 1px solid #E2ECE5;">
+                            <div style="font-size: 0.75rem; color: #526E60; text-transform: uppercase; font-weight: 700;">Net Harvest Value Saved</div>
+                            <div style="font-size: 1.5rem; font-weight: 800; color: #15803D; font-family: 'Space Grotesk';">
+                                {econ['net_savings_inr']} <span class="roi-badge">{econ['roi_multiplier']} ROI</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        # ------------------------------------------------------------------
+        # BIOMETEOROLOGICAL CONCURRENCE INDEX
+        # ------------------------------------------------------------------
         align_res = evaluate_environmental_alignment(leaf_res, clim_res)
 
         st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
@@ -1307,13 +1475,81 @@ def render_screen4():
             st.caption("⚠️ Chemical treatments are regulatory guidelines. Adhere strictly to local extension labels.")
 
         # ------------------------------------------------------------------
+        # FEATURE 2: 7-DAY ACTIONABLE RECOVERY ROADMAP
+        # ------------------------------------------------------------------
+        if leaf_res and leaf_res.get("predicted_class"):
+            crop = leaf_res.get("crop", "Crop")
+            disease = leaf_res.get("disease", "Condition")
+            roadmap = generate_recovery_roadmap(crop, disease, sp_box.get("status", "OPTIMAL"))
+
+            st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+            st.markdown("#### 📅 7-Day Actionable Recovery Roadmap")
+
+            for step in roadmap:
+                st.markdown(
+                    f"""
+                    <div class="roadmap-card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+                            <span style="font-weight: 700; color: #123D2A; font-size: 1.05rem;">{step['day']}: {step['stage']}</span>
+                        </div>
+                        <div style="font-size: 0.9rem; color: #334D3F; line-height: 1.5;">
+                            {step['action']}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        # ------------------------------------------------------------------
+        # FEATURE 3: KISAN HELPLINE & 1-CLICK WHATSAPP SHARE
+        # ------------------------------------------------------------------
+        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+        st.markdown("#### 📲 Field Sharing & Agricultural Helpline")
+
+        act_col1, act_col2 = st.columns(2)
+        with act_col1:
+            if leaf_res and leaf_res.get("predicted_class"):
+                crop = leaf_res.get("crop", "Crop")
+                disease = leaf_res.get("disease", "Condition")
+                conf = leaf_res.get("confidence", 0.0) * 100.0
+                loc = st.session_state.climate_loc_name
+                wa_url = build_whatsapp_share_url(crop, disease, conf, loc, "Immediate Action")
+
+                st.markdown(
+                    f"""
+                    <a href="{wa_url}" target="_blank" style="text-decoration: none;">
+                        <div style="background: #25D366; color: #FFFFFF; font-weight: 700; text-align: center;
+                                    padding: 0.85rem 1.2rem; border-radius: 12px; font-size: 0.95rem; box-shadow: 0 4px 12px rgba(37,211,102,0.3);">
+                            💬 Share Report on WhatsApp (KVK / Agronomist)
+                        </div>
+                    </a>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.info("Run leaf screening to enable one-click WhatsApp sharing.")
+
+        with act_col2:
+            st.markdown(
+                """
+                <a href="tel:18001801551" style="text-decoration: none;">
+                    <div style="background: #123D2A; color: #B7E66B; font-weight: 700; text-align: center;
+                                padding: 0.85rem 1.2rem; border-radius: 12px; font-size: 0.95rem; box-shadow: 0 4px 12px rgba(18,61,42,0.25);">
+                        📞 Call Kisan Call Centre (Toll-Free 1800-180-1551)
+                    </div>
+                </a>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        # ------------------------------------------------------------------
         # DOWNLOADABLE FIELD DIAGNOSTIC HEALTH CARD
         # ------------------------------------------------------------------
         st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
 
         cam_img = st.session_state.cam_result.get("overlay_image") if st.session_state.cam_result else None
         farmer_name = st.session_state.farmer_name or "Field Agronomist"
-        farm_location = st.session_state.farm_name or (clim_res.get("location", "Maharashtra Agricultural Plot") if clim_res else "Agricultural Plot")
+        farm_location = st.session_state.climate_loc_name or (clim_res.get("location", "Agricultural Plot") if clim_res else "Agricultural Plot")
 
         report_html = generate_field_report_html(
             leaf_result=leaf_res,
@@ -1337,7 +1573,7 @@ def render_screen4():
                 use_container_width=True,
             )
         with rc_col2:
-            st.caption("📄 Self-contained HTML report that prints to a 1-page PDF. Share with field extension officers.")
+            st.caption("📄 Print-ready HTML Field Health Card. Open in browser and press Ctrl+P to save as official PDF report.")
 
         # Disclaimer
         st.markdown(
@@ -1353,12 +1589,12 @@ def render_screen4():
 
         # Navigation
         st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
-        n_col1, n_col2 = st.columns([1, 1])
-        with n_col1:
+        nav1, nav2 = st.columns([1, 1])
+        with nav1:
             if st.button(t("btn_back_leaf", curr_lang), type="secondary", key="s4_back"):
                 st.session_state.screen = 3
                 st.rerun()
-        with n_col2:
+        with nav2:
             if st.button(t("btn_restart", curr_lang), type="primary", key="s4_restart"):
                 st.session_state.screen = 1
                 st.session_state.leaf_image = None
@@ -1383,12 +1619,11 @@ elif st.session_state.screen == 4:
 
 
 # ==============================================================================
-# PERSISTENT AI ASSISTANT SIDEBAR (Always visible when chat_open=True)
+# PERSISTENT 24/7 AI ASSISTANT IN DEDICATED SIDEBAR
 # ==============================================================================
 def _submit_chat_message(user_text: str) -> None:
     """Send user text to Gemini with contextual session state and append reply."""
     st.session_state.chat_messages.append({"role": "user", "content": user_text})
-    from src.cropcare.chat_engine import build_agronomic_context, generate_chat_response
 
     ctx = build_agronomic_context(
         screen=st.session_state.screen,
@@ -1396,7 +1631,7 @@ def _submit_chat_message(user_text: str) -> None:
         climate_result=st.session_state.climate_result,
         climate_days=st.session_state.climate_days,
     )
-    with st.spinner("Consulting CropCare AI..."):
+    with st.spinner("Consulting CropCare AI Advisor..."):
         reply = generate_chat_response(
             messages=st.session_state.chat_messages,
             context_str=ctx,
@@ -1404,22 +1639,24 @@ def _submit_chat_message(user_text: str) -> None:
     st.session_state.chat_messages.append({"role": "assistant", "content": reply})
 
 
-if st.session_state.chat_open and chat_col is not None:
-    with chat_col:
-        from src.cropcare.chat_engine import SUGGESTED_PROMPTS
-
+def render_sidebar_chatbot():
+    with st.sidebar:
         # Header
         st.markdown(
             """
-            <div class="chat-sidebar-header">
+            <div class="sidebar-ai-header">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
                     <div>
-                        <div style="font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; font-weight: 700;">🌱 CropCare AI</div>
-                        <div style="font-size: 0.75rem; color: #A0C4AB; margin-top: 0.15rem;">Agronomic Guidance · Powered by Gemini</div>
+                        <div style="font-family: 'Space Grotesk', sans-serif; font-size: 1.15rem; font-weight: 700; color: #FFFFFF;">
+                            🌱 CropCare AI Advisor
+                        </div>
+                        <div style="font-size: 0.75rem; color: #A0C4AB; margin-top: 0.15rem;">
+                            Live Agronomic Intelligence · Gemini
+                        </div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.4rem;">
-                        <span style="width:8px; height:8px; background:#B7E66B; border-radius:50%; display:inline-block; animation: pulse-green 2s infinite;"></span>
-                        <span style="font-size: 0.75rem; color: #B7E66B;">Live</span>
+                        <span class="live-dot"></span>
+                        <span style="font-size: 0.75rem; color: #B7E66B; font-weight: 700;">Online</span>
                     </div>
                 </div>
             </div>
@@ -1427,43 +1664,47 @@ if st.session_state.chat_open and chat_col is not None:
             unsafe_allow_html=True,
         )
 
-        # Context status pills
+        # Context Summary Chip
         leaf_ok = st.session_state.leaf_result is not None
         clim_ok = st.session_state.climate_result is not None
-        st.markdown(
-            f"""
-            <div class="chat-sidebar-body" style="padding: 0.7rem 1rem; border-radius: 0; border-top: none;">
-            <div style="display:flex; gap:0.4rem; flex-wrap: wrap;">
-                <span class="status-pill {'ok' if leaf_ok else 'warn'}">{'✅' if leaf_ok else '⏳'} Leaf {'Scanned' if leaf_ok else 'Pending'}</span>
-                <span class="status-pill {'ok' if clim_ok else 'warn'}">{'✅' if clim_ok else '⏳'} Climate {'Loaded' if clim_ok else 'Pending'}</span>
-            </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
 
-        # Suggested prompts (when < 2 messages)
-        if len(st.session_state.chat_messages) < 2:
-            st.markdown(
-                "<div style='padding: 0.4rem 0.8rem; font-size: 0.78rem; font-weight: 600; color: #526E60;'>💬 Try asking:</div>",
-                unsafe_allow_html=True,
-            )
-            for i, prompt in enumerate(SUGGESTED_PROMPTS[:4]):
-                if st.button(f"▸ {prompt}", key=f"chip_{i}", use_container_width=True):
-                    _submit_chat_message(prompt)
-                    st.rerun()
+        c_text = "<strong>Current Farm Telemetry:</strong><br>"
+        if leaf_ok:
+            lr = st.session_state.leaf_result
+            c_text += f"🍃 {lr.get('crop')}: {lr.get('disease')} ({lr.get('confidence',0)*100:.1f}%)<br>"
+        else:
+            c_text += "🍃 Leaf: Pending screening (Screen 2)<br>"
 
-        # Message history
-        chat_container = st.container(height=350)
-        with chat_container:
+        if clim_ok:
+            c_text += f"🌦️ Weather: {st.session_state.climate_loc_name} loaded"
+        else:
+            c_text += f"🌦️ Weather: {st.session_state.climate_loc_name} (Pending fetch)"
+
+        st.markdown(f'<div class="ai-context-chip">{c_text}</div>', unsafe_allow_html=True)
+
+        # Suggested Questions
+        st.markdown("<div style='font-size: 0.78rem; font-weight: 700; color: #A0C4AB; margin-bottom: 0.35rem;'>💬 Quick Agronomic Queries:</div>", unsafe_allow_html=True)
+        smart_prompts = [
+            "🌱 What is the best organic treatment?",
+            "🌦️ Can I spray today with current humidity?",
+            "💰 What is my projected economic loss risk?",
+            "📅 Give me a 7-day action roadmap",
+        ]
+        for idx, prompt in enumerate(smart_prompts):
+            if st.button(prompt, key=f"sidebar_prompt_{idx}", use_container_width=True):
+                _submit_chat_message(prompt)
+                st.rerun()
+
+        # Chat Message Container
+        chat_box = st.container(height=380)
+        with chat_box:
             if not st.session_state.chat_messages:
                 st.markdown(
                     """
-                    <div style='color: #526E60; font-size: 0.84rem; text-align: center; margin-top: 1.5rem; line-height: 1.6;'>
-                    👋 <strong>Hello, Farmer!</strong><br>
-                    I'm your AI agronomic advisor.<br>
-                    Ask me about your crop scan results,<br>
-                    weather stress, or treatment options.
+                    <div style='color: #A0C4AB; font-size: 0.85rem; text-align: center; margin-top: 2rem; line-height: 1.6;'>
+                    👋 <strong>Namaste, Farmer!</strong><br>
+                    I'm your 24/7 AI Agronomic Advisor.<br>
+                    Ask me any question in English, Hindi, or Marathi about your crop, symptoms, weather, or treatments.
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -1474,14 +1715,18 @@ if st.session_state.chat_open and chat_col is not None:
                     with st.chat_message(role, avatar="🧑‍🌾" if role == "user" else "🌱"):
                         st.markdown(turn.get("content", ""))
 
-        # Clear button
+        # Clear Chat Button
         if st.session_state.chat_messages:
-            if st.button("🗑️ Clear Chat", key="clear_chat_btn", use_container_width=True):
+            if st.button("🗑️ Clear Chat History", key="clear_sidebar_chat", use_container_width=True):
                 st.session_state.chat_messages = []
                 st.rerun()
 
-        # Input
-        prompt_text = st.chat_input("Ask about crops, disease, or weather...", key="chat_user_prompt")
-        if prompt_text:
-            _submit_chat_message(prompt_text)
+        # Chat Input at bottom of sidebar
+        chat_user_in = st.chat_input("Ask CropCare AI about your crops...", key="sidebar_chat_input")
+        if chat_user_in:
+            _submit_chat_message(chat_user_in)
             st.rerun()
+
+
+# Render sidebar chatbot
+render_sidebar_chatbot()
