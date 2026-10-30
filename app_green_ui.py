@@ -302,7 +302,7 @@ st.markdown(
         margin-bottom: 2rem;
     }
 
-    /* 3D Botanical Visual Graphic */
+    /* 3D Botanical Visual Graphic & Farmer Hero Card */
     .botanical-3d-card {
         background: rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(12px);
