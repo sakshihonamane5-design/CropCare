@@ -168,19 +168,39 @@ def _match_advisory(disease_str: str) -> Dict[str, Any]:
 
 
 def generate_actionable_advisory(
-    leaf_result: Optional[Dict[str, Any]],
-    climate_result: Optional[Dict[str, Any]],
+    leaf_result: Optional[Any] = None,
+    climate_result: Optional[Dict[str, Any]] = None,
+    *,
+    disease: Optional[str] = None,
+    crop: Optional[str] = None,
+    **kwargs: Any,
 ) -> Dict[str, Any]:
     """Generate integrated agronomic advisory with dynamic weather-smart spray rules.
 
     Args:
-        leaf_result: Dictionary returned by predict_image().
+        leaf_result: Dictionary returned by predict_image(), or disease string.
         climate_result: Dictionary returned by get_environment().
+        disease: Optional disease name string.
+        crop: Optional crop name string.
 
     Returns:
         Structured IPM plan with cultural, biological, chemical, and spray timing advisories.
     """
-    if not leaf_result or not leaf_result.get("predicted_class"):
+    if isinstance(leaf_result, str):
+        disease = leaf_result
+        leaf_result = None
+
+    if leaf_result is None and disease:
+        leaf_result = {
+            "predicted_class": f"{crop or 'Crop'}___{disease}",
+            "crop": crop or "Crop",
+            "disease": disease,
+        }
+
+    if climate_result is None and "climate" in kwargs:
+        climate_result = kwargs["climate"]
+
+    if not leaf_result or not isinstance(leaf_result, dict) or not leaf_result.get("predicted_class"):
         return {
             "status": "AWAITING_INPUT",
             "title": "Awaiting Leaf Screening",
@@ -194,9 +214,9 @@ def generate_actionable_advisory(
             },
         }
 
-    disease = leaf_result.get("disease", "Unknown")
-    is_healthy = "healthy" in disease.lower()
-    profile = _match_advisory(disease)
+    target_disease = disease or leaf_result.get("disease", "Unknown")
+    is_healthy = "healthy" in str(target_disease).lower()
+    profile = _match_advisory(str(target_disease))
 
     # Weather-Smart Spray Window Analysis
     spray_badge = "🟢 Favorable Application Window"
