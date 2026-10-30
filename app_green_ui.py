@@ -914,8 +914,9 @@ elif st.session_state.screen == 2:
         unsafe_allow_html=True,
     )
 
-    tab_screening, tab_studio, tab_library, tab_gradcam, tab_evaluation = st.tabs([
+    tab_screening, tab_dispatch, tab_studio, tab_library, tab_gradcam, tab_evaluation = st.tabs([
         t('tab_screening', lang),
+        t('tab_dispatch', lang),
         t('tab_studio', lang),
         t('tab_library', lang),
         t('tab_gradcam', lang),
@@ -1279,6 +1280,44 @@ elif st.session_state.screen == 2:
                     )
 
                     # ==================================================================
+                    # KISAN EMERGENCY DISPATCH QUICK-ACTIONS (WhatsApp & SMS)
+                    # ==================================================================
+                    location_name = st.session_state.get("location_name", "Agricultural Field")
+                    wa_url_quick = build_whatsapp_share_url(
+                        crop=crop, disease=disease,
+                        confidence_pct=conf * 100,
+                        location_name=location_name,
+                        urgency=sev["urgency"],
+                    )
+                    import urllib.parse
+                    sms_body_quick = urllib.parse.quote(
+                        f"CropCare Kisan Alert: {display_crop} showing symptoms of {display_disease} ({conf*100:.0f}% confidence, {sev['severity_level']}). Location: {location_name}. Please advise on treatment."
+                    )
+                    st.markdown(
+                        f"""
+                        <div style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:12px;padding:0.95rem 1.15rem;margin-bottom:1.2rem;">
+                            <div style="font-weight:700;color:#166534;font-size:0.95rem;margin-bottom:0.35rem;">
+                                🚨 {t('dispatch_title', lang)} (1-Click Action)
+                            </div>
+                            <div style="font-size:0.83rem;color:#14532D;margin-bottom:0.75rem;">
+                                {t('dispatch_desc', lang)}
+                            </div>
+                            <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+                                <a href="{wa_url_quick}" target="_blank"
+                                   style="display:inline-flex;align-items:center;gap:0.4rem;background:#25D366;color:#FFFFFF;font-weight:700;font-size:0.85rem;padding:0.55rem 0.95rem;border-radius:8px;text-decoration:none;box-shadow:0 2px 6px rgba(37,211,102,0.25);">
+                                    📲 {t('whatsapp_btn', lang)}
+                                </a>
+                                <a href="sms:?body={sms_body_quick}"
+                                   style="display:inline-flex;align-items:center;gap:0.4rem;background:#0284C7;color:#FFFFFF;font-weight:700;font-size:0.85rem;padding:0.55rem 0.95rem;border-radius:8px;text-decoration:none;box-shadow:0 2px 6px rgba(2,132,199,0.25);">
+                                    {t('sms_btn', lang)}
+                                </a>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    # ==================================================================
                     # AGRONOMIC NURTURING & CULTURAL REMEDIATION PROTOCOL
                     # ==================================================================
                     nurture = get_nurturing_recommendations(
@@ -1572,7 +1611,209 @@ elif st.session_state.screen == 2:
                             )
 
     # --------------------------------------------------------------------------
-    # TAB 2: CONTINUAL LEARNING & FIELD ADAPTATION STUDIO
+    # TAB 2: KISAN EMERGENCY DISPATCH CENTER (WHATSAPP & SMS)
+    # --------------------------------------------------------------------------
+    with tab_dispatch:
+        st.markdown(
+            f"""
+            <div class="crop-meta-box" style="border-left: 4px solid #0284C7; margin-bottom: 1.2rem;">
+                <h4 style="color: #0369A1; margin-bottom: 0.3rem;">📲 {t('dispatch_title', lang)}</h4>
+                <p style="font-size: 0.88rem; color: #334155; margin-bottom: 0.5rem;">
+                    {t('dispatch_desc', lang)}
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        loc_str = st.session_state.get("location_name", "Agricultural Field")
+        leaf_r = st.session_state.get("leaf_result")
+
+        if leaf_r and leaf_r.get("predicted_class"):
+            d_crop = translate_crop_name(leaf_r.get("crop", "Unknown"), lang)
+            d_disease = translate_disease_name(leaf_r.get("disease", "Unknown"), lang)
+            c_conf = leaf_r.get("confidence", 0.0)
+
+            st.markdown(
+                f"""
+                <div style="background:#FFFFFF;border:1.5px solid #CBD5E1;border-radius:12px;padding:1.1rem 1.3rem;margin-bottom:1rem;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+                    <div style="font-size:0.75rem;font-weight:700;color:#526E60;text-transform:uppercase;">Active Foliar Screening Diagnostic</div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.3rem;">
+                        <div style="font-size:1.3rem;font-weight:700;color:#123D2A;">{d_crop} — {d_disease}</div>
+                        <div style="background:#EBF7EE;color:#1B543A;font-weight:700;padding:0.25rem 0.75rem;border-radius:15px;font-size:0.85rem;">Confidence: {c_conf*100:.1f}%</div>
+                    </div>
+                    <div style="font-size:0.85rem;color:#526E60;margin-top:0.3rem;">Location: <strong>{loc_str}</strong></div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            c_btn1, c_btn2 = st.columns(2)
+            raw_c = leaf_r.get("crop", "Crop")
+            raw_d = leaf_r.get("disease", "Disease")
+            wa_dispatch_url = build_whatsapp_share_url(
+                crop=raw_c, disease=raw_d,
+                confidence_pct=c_conf * 100,
+                location_name=loc_str,
+                urgency="Review Required",
+            )
+            import urllib.parse
+            default_sms_text = f"CropCare Kisan Alert: {d_crop} showing symptoms of {d_disease} ({c_conf*100:.0f}% confidence). Farm Location: {loc_str}. Please review recovery advisory."
+            sms_dispatch_body = urllib.parse.quote(default_sms_text)
+
+            with c_btn1:
+                st.markdown(
+                    f"""
+                    <a href="{wa_dispatch_url}" target="_blank"
+                       style="display:flex;align-items:center;justify-content:center;gap:0.5rem;background:#25D366;color:#FFFFFF;font-weight:700;font-size:0.95rem;padding:0.8rem 1rem;border-radius:10px;text-decoration:none;box-shadow:0 3px 10px rgba(37,211,102,0.25);margin-bottom:0.8rem;">
+                        📲 {t('whatsapp_btn', lang)}
+                    </a>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with c_btn2:
+                st.markdown(
+                    f"""
+                    <a href="sms:?body={sms_dispatch_body}"
+                       style="display:flex;align-items:center;justify-content:center;gap:0.5rem;background:#0284C7;color:#FFFFFF;font-weight:700;font-size:0.95rem;padding:0.8rem 1rem;border-radius:10px;text-decoration:none;box-shadow:0 3px 10px rgba(2,132,199,0.25);margin-bottom:0.8rem;">
+                        {t('sms_btn', lang)}
+                    </a>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            # Custom Interactive SMS & WhatsApp Composer
+            with st.expander("📝 Custom Message Composer & Recipient Selector", expanded=True):
+                st.markdown("##### Dispatch Settings")
+                r_col1, r_col2 = st.columns([1, 1])
+                with r_col1:
+                    recipient_type = st.selectbox(
+                        "Select Recipient Directory:",
+                        [
+                            "District Extension Officer / KVK",
+                            "Kisan Call Center (Toll-Free 1800-180-1551)",
+                            "Local Village Krishi Mitra / Panchayat",
+                            "Custom Mobile Number",
+                        ],
+                        key="tab_dispatch_recipient_type",
+                    )
+                with r_col2:
+                    if recipient_type == "Custom Mobile Number":
+                        phone_input = st.text_input("Enter Mobile Number (with country code):", value="+91 ", key="custom_phone_input_tab")
+                    elif "1800-180-1551" in recipient_type:
+                        phone_input = "18001801551"
+                        st.text_input("Helpline Number:", value=phone_input, disabled=True, key="kcc_phone_display_tab")
+                    else:
+                        phone_input = ""
+                        st.info("Uses default extension directory or device SMS app.")
+
+                custom_msg = st.text_area(
+                    "Edit Alert Message Before Sending:",
+                    value=default_sms_text,
+                    height=90,
+                    key="tab_dispatch_msg_textarea",
+                )
+
+                encoded_custom_msg = urllib.parse.quote(custom_msg)
+                sms_link_custom = f"sms:{phone_input}?body={encoded_custom_msg}" if phone_input else f"sms:?body={encoded_custom_msg}"
+                wa_phone_param = f"&phone={phone_input.replace('+', '').replace(' ', '')}" if phone_input and phone_input != "18001801551" else ""
+                wa_link_custom = f"https://api.whatsapp.com/send?text={encoded_custom_msg}{wa_phone_param}"
+
+                act_col1, act_col2, act_col3 = st.columns(3)
+                with act_col1:
+                    st.markdown(
+                        f"""
+                        <a href="{sms_link_custom}"
+                           style="display:flex;align-items:center;justify-content:center;gap:0.4rem;background:#0284C7;color:#FFFFFF;font-weight:700;font-size:0.85rem;padding:0.6rem 0.8rem;border-radius:8px;text-decoration:none;">
+                            📱 Send SMS Now
+                        </a>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with act_col2:
+                    st.markdown(
+                        f"""
+                        <a href="{wa_link_custom}" target="_blank"
+                           style="display:flex;align-items:center;justify-content:center;gap:0.4rem;background:#25D366;color:#FFFFFF;font-weight:700;font-size:0.85rem;padding:0.6rem 0.8rem;border-radius:8px;text-decoration:none;">
+                            📲 Send WhatsApp Now
+                        </a>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with act_col3:
+                    st.markdown(
+                        """
+                        <a href="tel:18001801551"
+                           style="display:flex;align-items:center;justify-content:center;gap:0.4rem;background:#E11D48;color:#FFFFFF;font-weight:700;font-size:0.85rem;padding:0.6rem 0.8rem;border-radius:8px;text-decoration:none;">
+                            📞 Call KCC 1800-180-1551
+                        </a>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+        else:
+            st.info("🍃 No active leaf screening found in this session. Select a sample below to simulate a real-time foliar alert, or upload a leaf photo in Tab 1.")
+            st.markdown("##### ⚡ 1-Click Quick-Test Dispatch with Field Samples:")
+            ts_c1, ts_c2, ts_c3 = st.columns(3)
+            with ts_c1:
+                if st.button("🍅 Test Tomato Blight Alert", key="tab_disp_btn_tom", use_container_width=True):
+                    sample_path = "assets/samples/tomato_early_blight.jpg"
+                    if os.path.exists(sample_path):
+                        from PIL import Image
+                        img = Image.open(sample_path)
+                        st.session_state.leaf_image = img
+                        st.session_state.selected_crop_type = "Tomato"
+                        st.session_state.leaf_result = predict_image(img, crop_filter="Tomato")
+                        st.rerun()
+            with ts_c2:
+                if st.button("🥔 Test Potato Blight Alert", key="tab_disp_btn_pot", use_container_width=True):
+                    sample_path = "assets/samples/potato_early_blight.jpg"
+                    if os.path.exists(sample_path):
+                        from PIL import Image
+                        img = Image.open(sample_path)
+                        st.session_state.leaf_image = img
+                        st.session_state.selected_crop_type = "Potato"
+                        st.session_state.leaf_result = predict_image(img, crop_filter="Potato")
+                        st.rerun()
+            with ts_c3:
+                if st.button("🌿 Test Healthy Crop Alert", key="tab_disp_btn_hlth", use_container_width=True):
+                    sample_path = "assets/samples/tomato_healthy.jpg"
+                    if os.path.exists(sample_path):
+                        from PIL import Image
+                        img = Image.open(sample_path)
+                        st.session_state.leaf_image = img
+                        st.session_state.selected_crop_type = "Tomato"
+                        st.session_state.leaf_result = predict_image(img, crop_filter="Tomato")
+                        st.rerun()
+
+            st.markdown("---")
+            st.markdown("##### 📞 National Kisan Emergency Hotlines")
+            kcc_c1, kcc_c2 = st.columns(2)
+            with kcc_c1:
+                st.markdown(
+                    """
+                    <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:0.9rem;">
+                        <div style="font-weight:700;color:#0F172A;font-size:0.9rem;">📞 Kisan Call Center (KCC)</div>
+                        <div style="font-size:0.8rem;color:#64748B;margin:0.2rem 0 0.5rem 0;">Toll-Free, 22 Official Languages, 6:00 AM - 10:00 PM</div>
+                        <a href="tel:18001801551" style="display:inline-block;background:#166534;color:#FFFFFF;padding:0.4rem 0.8rem;border-radius:6px;font-weight:700;font-size:0.82rem;text-decoration:none;">Dial 1800-180-1551</a>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with kcc_c2:
+                st.markdown(
+                    """
+                    <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:0.9rem;">
+                        <div style="font-weight:700;color:#0F172A;font-size:0.9rem;">📱 Krishi Vigyan Kendra (KVK) Portal</div>
+                        <div style="font-size:0.8rem;color:#64748B;margin:0.2rem 0 0.5rem 0;">Indian Council of Agricultural Research (ICAR)</div>
+                        <a href="https://kvk.icar.gov.in" target="_blank" style="display:inline-block;background:#0284C7;color:#FFFFFF;padding:0.4rem 0.8rem;border-radius:6px;font-weight:700;font-size:0.82rem;text-decoration:none;">Open KVK Portal ↗</a>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+    # --------------------------------------------------------------------------
+    # TAB 3: CONTINUAL LEARNING & FIELD ADAPTATION STUDIO
     # --------------------------------------------------------------------------
     with tab_studio:
         st.markdown(
@@ -2400,6 +2641,42 @@ elif st.session_state.screen == 4:
             mime="text/html",
             use_container_width=True,
         )
+
+        # Screen 4 Kisan Emergency Dispatch
+        s4_loc = st.session_state.get("location_name", "Agricultural Field")
+        s4_crop_raw = leaf_res.get("crop", "Crop")
+        s4_disease_raw = leaf_res.get("disease", "Condition")
+        wa_url_s4 = build_whatsapp_share_url(
+            crop=s4_crop_raw, disease=s4_disease_raw,
+            confidence_pct=conf * 100,
+            location_name=s4_loc,
+            urgency=sev_s4["urgency"],
+        )
+        import urllib.parse
+        sms_text_s4 = urllib.parse.quote(
+            f"CropCare Kisan Executive Report: {crop} diagnosed with {disease} ({conf*100:.0f}% confidence, {sev_s4['severity_level']}). Location: {s4_loc}. Please advise."
+        )
+        s4_disp1, s4_disp2 = st.columns(2)
+        with s4_disp1:
+            st.markdown(
+                f"""
+                <a href="{wa_url_s4}" target="_blank"
+                   style="display:flex;align-items:center;justify-content:center;gap:0.5rem;background:#25D366;color:#FFFFFF;font-weight:700;font-size:0.88rem;padding:0.65rem 1rem;border-radius:10px;text-decoration:none;box-shadow:0 3px 10px rgba(37,211,102,0.25);margin-top:0.4rem;">
+                    📲 {t('whatsapp_btn', lang)}
+                </a>
+                """,
+                unsafe_allow_html=True,
+            )
+        with s4_disp2:
+            st.markdown(
+                f"""
+                <a href="sms:?body={sms_text_s4}"
+                   style="display:flex;align-items:center;justify-content:center;gap:0.5rem;background:#0284C7;color:#FFFFFF;font-weight:700;font-size:0.88rem;padding:0.65rem 1rem;border-radius:10px;text-decoration:none;box-shadow:0 2px 10px rgba(2,132,199,0.25);margin-top:0.4rem;">
+                    {t('sms_btn', lang)}
+                </a>
+                """,
+                unsafe_allow_html=True,
+            )
 
     # Global Agronomic Synthesis Advisory
     st.markdown(
