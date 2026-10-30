@@ -18,8 +18,13 @@ import torch.nn as nn
 from src.cropcare.image_engine import (
     DEFAULT_CONFIDENCE_THRESHOLD,
     check_image_quality,
+    extract_leaf_embedding,
+    get_registered_field_leaves,
+    get_supported_crops,
     predict_image,
     preprocess_image,
+    query_field_memory,
+    register_field_leaf,
 )
 from src.cropcare.training.train_model import build_model
 
@@ -31,6 +36,8 @@ class TestImageEngineOffline(unittest.TestCase):
         self.test_dir = tempfile.mkdtemp()
         self.dummy_mapping_path = os.path.join(self.test_dir, "test_class_mapping.json")
         self.dummy_model_path = os.path.join(self.test_dir, "test_model.pth")
+        self.dummy_memory_path = os.path.join(self.test_dir, "test_memory.json")
+        self.dummy_uploads_dir = os.path.join(self.test_dir, "uploads")
 
         # Create a mini 3-class test mapping
         self.classes = [
@@ -191,6 +198,84 @@ class TestImageEngineOffline(unittest.TestCase):
             confidence_threshold=0.01,
         )
         self.assertFalse(res_low_thresh["uncertain"])
+
+    def test_crop_filter_and_supported_crops(self):
+        """Verify crop filtering restricts classes and normalizes probabilities for that crop."""
+        catalog = get_supported_crops("models/class_mapping.json")
+        self.assertIn("Tomato", catalog)
+        self.assertEqual(len(catalog["Tomato"]["classes"]), 10)
+        self.assertEqual(catalog["Tomato"]["icon"], "🍅")
+
+        # Test inference with crop filter on the 3-class test mapping
+        leaf_img = Image.new("RGB", (224, 224), color=(80, 160, 90))
+        res_apple = predict_image(
+            leaf_img,
+            model_path=self.dummy_model_path,
+            mapping_path=self.dummy_mapping_path,
+            crop_filter="Apple",
+        )
+        self.assertTrue(res_apple.get("crop_filter_applied"))
+        self.assertEqual(res_apple["crop"], "Apple")
+        self.assertEqual(len(res_apple["probabilities"]), 2)
+        self.assertAlmostEqual(sum(res_apple["probabilities"].values()), 1.0, places=2)
+
+    def test_multi_view_tta_inference(self):
+        """Verify Test-Time Augmentation (TTA) multi-view forward pass runs cleanly."""
+        np_arr = np.random.randint(40, 210, (300, 400, 3), dtype=np.uint8)
+        leaf_img = Image.fromarray(np_arr)
+        res_tta = predict_image(
+            leaf_img,
+            model_path=self.dummy_model_path,
+            mapping_path=self.dummy_mapping_path,
+            use_tta=True,
+        )
+        self.assertIsNotNone(res_tta["predicted_class"])
+        self.assertTrue(0.0 <= res_tta["confidence"] <= 1.0)
+
+    def test_continual_learning_memory_bank(self):
+        """Verify field memory registration, embedding extraction, and cosine query."""
+        leaf_img = Image.new("RGB", (224, 224), color=(40, 150, 60))
+
+        # 1. Feature extraction
+        emb = extract_leaf_embedding(
+            leaf_img,
+            model_path=self.dummy_model_path,
+            mapping_path=self.dummy_mapping_path,
+        )
+        self.assertIsNotNone(emb)
+        self.assertEqual(len(emb), 1024)
+        emb_norm = np.linalg.norm(emb)
+        self.assertAlmostEqual(emb_norm, 1.0, places=3)
+
+        # 2. Registration of new field observation (e.g. Rice Blast)
+        reg_res = register_field_leaf(
+            leaf_img,
+            crop="Rice",
+            disease="Blast",
+            notes="Observed in monsoon field",
+            memory_path=self.dummy_memory_path,
+            uploads_dir=self.dummy_uploads_dir,
+            model_path=self.dummy_model_path,
+            mapping_path=self.dummy_mapping_path,
+        )
+        self.assertTrue(reg_res["success"])
+        self.assertEqual(reg_res["total_samples"], 1)
+
+        # 3. Query memory bank with identical image
+        match = query_field_memory(
+            emb,
+            memory_path=self.dummy_memory_path,
+            similarity_threshold=0.80,
+        )
+        self.assertIsNotNone(match)
+        self.assertEqual(match["crop"], "Rice")
+        self.assertEqual(match["disease"], "Blast")
+        self.assertGreaterEqual(match["similarity"], 0.99)
+
+        # 4. List registered leaves
+        leaves = get_registered_field_leaves(memory_path=self.dummy_memory_path)
+        self.assertEqual(len(leaves), 1)
+        self.assertEqual(leaves[0]["crop"], "Rice")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""CropCare — Farmer-Friendly Location & Geocoding Engine.
+﻿"""CropCare ΓÇö Farmer-Friendly Location & Geocoding Engine.
 
 Provides intuitive agricultural location lookups:
 1. Indian Agricultural Hubs database across 15+ agricultural states and 100+ districts.
@@ -111,18 +111,18 @@ AGRI_DISTRICTS: Dict[str, Dict[str, Tuple[float, float, str]]] = {
 
 # Quick 1-click Top Farming Presets for immediate UI selection
 TOP_PRESET_LOCATIONS: Dict[str, Tuple[float, float]] = {
-    "🍇 Nashik, Maharashtra (Grape & Onion Capital)": (19.9975, 73.7898),
-    "🌾 Ludhiana, Punjab (Wheat & Grain Belt)": (30.9010, 75.8573),
-    "🌶️ Guntur, Andhra Pradesh (Chilli & Cotton Hub)": (16.3067, 80.4365),
-    "🍊 Nagpur, Maharashtra (Orange & Soybean Hub)": (21.1458, 79.0882),
-    "🥔 Agra, Uttar Pradesh (Potato Belt)": (27.1767, 78.0081),
-    "🍎 Shimla, Himachal Pradesh (Apple Belt)": (31.1048, 77.1734),
-    "🌱 Karnal, Haryana (Basmati Rice Belt)": (29.6857, 76.9905),
-    "🥜 Rajkot, Gujarat (Groundnut & Cotton)": (22.3039, 70.8022),
-    "🌱 Belagavi, Karnataka (Sugarcane & Veg Hub)": (15.8497, 74.4977),
-    "🌽 Chhindwara, Madhya Pradesh (Corn City)": (22.0574, 78.9382),
-    "🌾 Burdwan, West Bengal (Paddy Bowl)": (23.2324, 87.8615),
-    "🌿 Wayanad, Kerala (Spices & Coffee)": (11.6854, 76.1320),
+    "≡ƒìç Nashik, Maharashtra (Grape & Onion Capital)": (19.9975, 73.7898),
+    "≡ƒî╛ Ludhiana, Punjab (Wheat & Grain Belt)": (30.9010, 75.8573),
+    "≡ƒî╢∩╕Å Guntur, Andhra Pradesh (Chilli & Cotton Hub)": (16.3067, 80.4365),
+    "≡ƒìè Nagpur, Maharashtra (Orange & Soybean Hub)": (21.1458, 79.0882),
+    "≡ƒÑö Agra, Uttar Pradesh (Potato Belt)": (27.1767, 78.0081),
+    "≡ƒìÄ Shimla, Himachal Pradesh (Apple Belt)": (31.1048, 77.1734),
+    "≡ƒî▒ Karnal, Haryana (Basmati Rice Belt)": (29.6857, 76.9905),
+    "≡ƒÑ£ Rajkot, Gujarat (Groundnut & Cotton)": (22.3039, 70.8022),
+    "≡ƒî▒ Belagavi, Karnataka (Sugarcane & Veg Hub)": (15.8497, 74.4977),
+    "≡ƒî╜ Chhindwara, Madhya Pradesh (Corn City)": (22.0574, 78.9382),
+    "≡ƒî╛ Burdwan, West Bengal (Paddy Bowl)": (23.2324, 87.8615),
+    "≡ƒî┐ Wayanad, Kerala (Spices & Coffee)": (11.6854, 76.1320),
 }
 
 
@@ -171,7 +171,7 @@ def search_location_online(query: str) -> List[Dict[str, Any]]:
                             "latitude": float(lat),
                             "longitude": float(lon),
                             "elevation": elev,
-                            "display": f"📍 {name}" + (f", {admin1}" if admin1 else "") + (f", {country}" if country else ""),
+                            "display": f"≡ƒôì {name}" + (f", {admin1}" if admin1 else "") + (f", {country}" if country else ""),
                         })
                 return formatted
     except Exception:
@@ -196,7 +196,7 @@ def search_location_offline(query: str) -> List[Dict[str, Any]]:
                     "latitude": lat,
                     "longitude": lon,
                     "elevation": 0,
-                    "display": f"📍 {dist_name}, {state} ({crops})",
+                    "display": f"≡ƒôì {dist_name}, {state} ({crops})",
                 })
     return matches[:6]
 

@@ -1,9 +1,9 @@
-"""CropCare — Economic Impact & Yield Risk Estimation Engine.
+﻿"""CropCare ΓÇö Economic Impact & Yield Risk Estimation Engine.
 
 Translates visual disease diagnoses and environmental stress metrics into
 tangible economic metrics for farmers and agricultural loan officers:
 - Estimated yield loss percentage range
-- Financial value at risk per acre (in INR ₹ and USD $)
+- Financial value at risk per acre (in INR Γé╣ and USD $)
 - Intervention cost vs net harvest preservation (ROI)
 - Urgency tier and action priority
 """
@@ -35,49 +35,49 @@ DISEASE_LOSS_PROFILES: Dict[str, Dict[str, Any]] = {
     "Late_blight": {
         "loss_min_pct": 50,
         "loss_max_pct": 95,
-        "urgency": "🚨 EMERGENCY (Within 48h)",
+        "urgency": "≡ƒÜ¿ EMERGENCY (Within 48h)",
         "urgency_badge": "Critical",
         "description": "Late blight moves rapidly via sporangia under humid weather; can wipe out entire plots within 7-10 days.",
     },
     "Early_blight": {
         "loss_min_pct": 20,
         "loss_max_pct": 45,
-        "urgency": "⚠️ HIGH PRIORITY (3-5 Days)",
+        "urgency": "ΓÜá∩╕Å HIGH PRIORITY (3-5 Days)",
         "urgency_badge": "High",
         "description": "Progressive defoliation causes sunscald on fruits and premature vine death.",
     },
     "Bacterial_spot": {
         "loss_min_pct": 25,
         "loss_max_pct": 55,
-        "urgency": "⚠️ HIGH PRIORITY (3-5 Days)",
+        "urgency": "ΓÜá∩╕Å HIGH PRIORITY (3-5 Days)",
         "urgency_badge": "High",
         "description": "Causes unmarketable fruit spotting and severe canopy defoliation.",
     },
     "Black_rot": {
         "loss_min_pct": 40,
         "loss_max_pct": 80,
-        "urgency": "🚨 CRITICAL (48-72h)",
+        "urgency": "≡ƒÜ¿ CRITICAL (48-72h)",
         "urgency_badge": "Critical",
         "description": "Mummifies grape berries and attacks young shoot growth.",
     },
     "Powdery_mildew": {
         "loss_min_pct": 15,
         "loss_max_pct": 35,
-        "urgency": "🟡 MODERATE (5-7 Days)",
+        "urgency": "≡ƒƒí MODERATE (5-7 Days)",
         "urgency_badge": "Moderate",
         "description": "White mycelium blocks photosynthetic active radiation, stunting fruit sizing.",
     },
     "Leaf_scorch": {
         "loss_min_pct": 15,
         "loss_max_pct": 30,
-        "urgency": "🟡 MODERATE (5-7 Days)",
+        "urgency": "≡ƒƒí MODERATE (5-7 Days)",
         "urgency_badge": "Moderate",
         "description": "Reduces effective leaf area and crown vigor for subsequent flower flushes.",
     },
     "healthy": {
         "loss_min_pct": 0,
         "loss_max_pct": 0,
-        "urgency": "✅ ZERO RISK — MAINTAIN GOOD PRACTICES",
+        "urgency": "Γ£à ZERO RISK ΓÇö MAINTAIN GOOD PRACTICES",
         "urgency_badge": "Negligible",
         "description": "Foliage exhibits vigorous chlorophyll concentration and no visible lesion necroses.",
     },
@@ -119,7 +119,7 @@ def estimate_economic_impact(
             profile = {
                 "loss_min_pct": 15,
                 "loss_max_pct": 40,
-                "urgency": "⚠️ ATTENTION NEEDED (5-7 Days)",
+                "urgency": "ΓÜá∩╕Å ATTENTION NEEDED (5-7 Days)",
                 "urgency_badge": "Moderate",
                 "description": "Visual symptoms indicate potential fungal or physiological stress.",
             }
@@ -152,14 +152,14 @@ def estimate_economic_impact(
         "is_healthy": is_healthy,
         "urgency": profile["urgency"],
         "urgency_badge": profile["urgency_badge"],
-        "loss_pct_range": f"{loss_min}% – {loss_max}%" if not is_healthy else "0%",
+        "loss_pct_range": f"{loss_min}% ΓÇô {loss_max}%" if not is_healthy else "0%",
         "loss_min_pct": loss_min,
         "loss_max_pct": loss_max,
         "baseline_harvest_value_inr": round(baseline_rev),
         "loss_value_min_inr": round(loss_rev_min),
         "loss_value_max_inr": round(loss_rev_max),
         "treatment_cost_inr": round(total_treatment_cost),
-        "net_savings_inr": f"₹{int(net_savings_min):,} – ₹{int(net_savings_max):,}" if not is_healthy else "₹0",
+        "net_savings_inr": f"Γé╣{int(net_savings_min):,} ΓÇô Γé╣{int(net_savings_max):,}" if not is_healthy else "Γé╣0",
         "roi_multiplier": f"{roi_multiplier}x" if roi_multiplier > 0 else "N/A",
         "description": profile["description"],
     }

@@ -1,4 +1,4 @@
-"""CropCare — Modular UI Component Library.
+﻿"""CropCare ΓÇö Modular UI Component Library.
 
 Provides reusable presentation components for Streamlit dashboards:
 - Metric badges and status pills

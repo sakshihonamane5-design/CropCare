@@ -1,4 +1,4 @@
-"""CropCare — Agronomic Biometeorological Alignment Engine.
+﻿"""CropCare ΓÇö Agronomic Biometeorological Alignment Engine.
 
 This module bridges the gap between optical leaf-health classification and
 micro-environmental weather observations. It evaluates epidemiological concurrence:
@@ -161,7 +161,7 @@ def evaluate_environmental_alignment(
     default_res = {
         "status": "INSUFFICIENT_DATA",
         "score": 50,
-        "badge": "⚪ Data Incomplete",
+        "badge": "ΓÜ¬ Data Incomplete",
         "badge_color": "#526E60",
         "category": "Undetermined",
         "explanation": "Provide both leaf screening and location weather to compute environmental concurrence.",
@@ -200,17 +200,17 @@ def evaluate_environmental_alignment(
         factors = []
         score = 80
         if t_mean is not None and 18 <= t_mean <= 28:
-            factors.append(f"Moderate mean temperature ({t_mean:.1f}°C) within normal vegetative envelope.")
+            factors.append(f"Moderate mean temperature ({t_mean:.1f}┬░C) within normal vegetative envelope.")
         if rain is not None and rain > 15:
             factors.append(f"Adequate moisture availability ({rain:.1f} mm).")
         if temp_anom is not None and abs(temp_anom) > 3.0:
             score -= 20
-            factors.append(f"Noticeable temperature anomaly ({temp_anom:+.1f}°C) may induce physiological stress.")
+            factors.append(f"Noticeable temperature anomaly ({temp_anom:+.1f}┬░C) may induce physiological stress.")
 
         return {
             "status": "OPTIMAL_GROWTH",
             "score": score,
-            "badge": "🟢 Healthy Growth Envelope",
+            "badge": "≡ƒƒó Healthy Growth Envelope",
             "badge_color": "#1B543A",
             "category": "Vegetative Balance",
             "explanation": "Leaf visual structure exhibits no diagnostic lesions, and local weather supports normal vegetative development.",
@@ -225,11 +225,11 @@ def evaluate_environmental_alignment(
         return {
             "status": "MODERATE_ALIGNMENT",
             "score": 60,
-            "badge": "🟡 Contextual Plausibility",
+            "badge": "≡ƒƒí Contextual Plausibility",
             "badge_color": "#B45309",
             "category": "General Observation",
             "explanation": f"Visual symptoms indicate {disease}. General ambient conditions fall within typical seasonal cultivation bounds.",
-            "matched_factors": [f"Mean local temperature: {t_mean if t_mean is not None else 'N/A'}°C"],
+            "matched_factors": [f"Mean local temperature: {t_mean if t_mean is not None else 'N/A'}┬░C"],
             "abiotic_stress_flag": False,
             "abiotic_stress_summary": None,
         }
@@ -246,13 +246,13 @@ def evaluate_environmental_alignment(
         t_rng_low, t_rng_high = profile["temp_range"]
         if t_opt_low <= t_mean <= t_opt_high:
             score += 25
-            matched_factors.append(f"Observed temperature ({t_mean:.1f}°C) matches optimal pathogen virulence range ({t_opt_low}–{t_opt_high}°C).")
+            matched_factors.append(f"Observed temperature ({t_mean:.1f}┬░C) matches optimal pathogen virulence range ({t_opt_low}ΓÇô{t_opt_high}┬░C).")
         elif t_rng_low <= t_mean <= t_rng_high:
             score += 10
-            matched_factors.append(f"Observed temperature ({t_mean:.1f}°C) lies within pathogen permissive envelope.")
+            matched_factors.append(f"Observed temperature ({t_mean:.1f}┬░C) lies within pathogen permissive envelope.")
         else:
             score -= 15
-            matched_factors.append(f"Ambient temperature ({t_mean:.1f}°C) departs from standard pathogen incubation range.")
+            matched_factors.append(f"Ambient temperature ({t_mean:.1f}┬░C) departs from standard pathogen incubation range.")
 
     # 2. Moisture & Humidity Analysis
     if rh is not None:
@@ -283,14 +283,14 @@ def evaluate_environmental_alignment(
             # Pests like spider mites or powdery mildew prefer dry/hot spells
             if rain_anom < 0 or (temp_anom is not None and temp_anom > 1.5):
                 score += 20
-                matched_factors.append(f"Warm/dry anomaly ({temp_anom:+.1f}°C) accelerates pest multiplication and foliar desiccation.")
+                matched_factors.append(f"Warm/dry anomaly ({temp_anom:+.1f}┬░C) accelerates pest multiplication and foliar desiccation.")
 
     # Clamp score
     score = max(10, min(95, score))
 
     if score >= 75:
         status = "HIGH_ALIGNMENT"
-        badge = "🟢 Strong Environmental Concurrence"
+        badge = "≡ƒƒó Strong Environmental Concurrence"
         badge_color = "#15803D"
         explanation = (
             f"Hyper-local weather conditions in the observation window strongly align with the known biological "
@@ -299,7 +299,7 @@ def evaluate_environmental_alignment(
         )
     elif score <= 40 or abiotic_flag:
         status = "DIVERGENT_STRESS"
-        badge = "🟠 Environmental Divergence / Abiotic Stress"
+        badge = "≡ƒƒá Environmental Divergence / Abiotic Stress"
         badge_color = "#D97706"
         explanation = (
             f"While optical screening identifies symptoms resembling {disease}, recent environmental telemetry reveals "
@@ -307,7 +307,7 @@ def evaluate_environmental_alignment(
         )
     else:
         status = "MODERATE_ALIGNMENT"
-        badge = "🟡 Moderate Climate Plausibility"
+        badge = "≡ƒƒí Moderate Climate Plausibility"
         badge_color = "#B45309"
         explanation = (
             f"Recent weather provides moderate plausibility for {disease}. Conditions fall within acceptable "

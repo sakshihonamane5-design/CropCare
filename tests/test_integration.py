@@ -1,4 +1,4 @@
-"""Comprehensive End-to-End Integration Tests for CropCare.
+﻿"""Comprehensive End-to-End Integration Tests for CropCare.
 
 Tests complete cross-module pipeline:
 1. Optical leaf screening (MobileNetV3)
@@ -99,7 +99,7 @@ class TestEndToEndCropCarePipeline(unittest.TestCase):
             farmer_name="Shri Santosh Jadhav",
             farm_location="Pune, Maharashtra",
         )
-        self.assertIn("CropCare™ Intelligence", html_report)
+        self.assertIn("CropCareΓäó Intelligence", html_report)
         self.assertIn("Shri Santosh Jadhav", html_report)
         self.assertIn("window.print()", html_report)
 
