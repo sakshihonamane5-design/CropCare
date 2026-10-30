@@ -3,7 +3,7 @@
 A premium, guided 4-screen SaaS application providing transfer-learning
 leaf screening, Grad-CAM explainability, hyper-local environmental intelligence,
 biometeorological concurrence analysis, weather-smart IPM advisories,
-economic loss estimation, and a 24/7 persistent Gemini AI Agronomist.
+economic loss estimation, Gemini Multimodal Vision verification, and a 24/7 persistent Gemini AI Agronomist.
 """
 
 from __future__ import annotations
@@ -38,6 +38,7 @@ from src.cropcare.location_engine import (
 from src.cropcare.chat_engine import (
     build_agronomic_context,
     generate_chat_response,
+    verify_leaf_with_gemini_vision,
     SUGGESTED_PROMPTS,
 )
 
@@ -545,6 +546,8 @@ defaults = {
     "leaf_image_id": None,
     "leaf_result": None,
     "cam_result": None,
+    "selected_crop_filter": "🔍 Auto-Detect (All 14 Crops)",
+    "gemini_vision_res": None,
     "climate_lat": 19.9975,  # Default to Nashik, Maharashtra
     "climate_lon": 73.7898,
     "climate_loc_name": "Nashik, Maharashtra",
@@ -682,7 +685,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Main container for full screen width
 main_col = st.container()
 
 
@@ -723,7 +725,6 @@ def render_screen1():
                 unsafe_allow_html=True,
             )
 
-            # Optional quick farmer profile
             with st.expander("👨‍🌾 Optional: Enter Farmer & Field Profile (Personalises report)", expanded=False):
                 p_c1, p_c2 = st.columns(2)
                 with p_c1:
@@ -742,7 +743,6 @@ def render_screen1():
                 st.rerun()
 
         with hero_col_right:
-            # Hero card using local base64 farmer hero or botanical graphic
             farmer_img_uri = get_image_base64("assets/farmer_hero.jpg")
             if farmer_img_uri:
                 st.markdown(
@@ -781,7 +781,6 @@ def render_screen1():
 
         st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
 
-        # 6 Feature Cards
         f_col1, f_col2, f_col3 = st.columns(3, gap="medium")
         features_row1 = [
             ("🍃", t('feat1_title', curr_lang), t('feat1_desc', curr_lang)),
@@ -823,7 +822,7 @@ def render_screen1():
 
 
 # ==============================================================================
-# SCREEN 2: LEAF SCREENING & EXPLAINABLE AI
+# SCREEN 2: LEAF SCREENING, EXPLAINABLE AI & GEMINI VISION VERIFICATION
 # ==============================================================================
 def render_screen2():
     with main_col:
@@ -840,8 +839,84 @@ def render_screen2():
         leaf_col_left, leaf_col_right = st.columns([1, 1], gap="large")
 
         with leaf_col_left:
-            st.markdown("#### 📷 Leaf Acquisition (Upload or Camera)")
+            # 1-Click Instant Test Samples
+            st.markdown("##### ⚡ Instant Benchmark Samples (Click to Test):")
+            sc1, sc2 = st.columns(2)
+            with sc1:
+                if st.button("🍅 Tomato: Early Blight", use_container_width=True, key="smpl_t_eb"):
+                    p = Path(__file__).resolve().parent / "assets/samples/tomato_early_blight.jpg"
+                    if p.exists():
+                        st.session_state.leaf_image = Image.open(p).convert("RGB")
+                        st.session_state.leaf_image_id = "sample_tomato_early_blight"
+                        st.session_state.selected_crop_filter = "Tomato"
+                        st.session_state.leaf_result = None
+                        st.session_state.cam_result = None
+                        st.session_state.gemini_vision_res = None
+                        st.rerun()
+                if st.button("🍅 Tomato: Late Blight", use_container_width=True, key="smpl_t_lb"):
+                    p = Path(__file__).resolve().parent / "assets/samples/tomato_late_blight.jpg"
+                    if p.exists():
+                        st.session_state.leaf_image = Image.open(p).convert("RGB")
+                        st.session_state.leaf_image_id = "sample_tomato_late_blight"
+                        st.session_state.selected_crop_filter = "Tomato"
+                        st.session_state.leaf_result = None
+                        st.session_state.cam_result = None
+                        st.session_state.gemini_vision_res = None
+                        st.rerun()
+            with sc2:
+                if st.button("🥔 Potato: Early Blight", use_container_width=True, key="smpl_p_eb"):
+                    p = Path(__file__).resolve().parent / "assets/samples/potato_early_blight.jpg"
+                    if p.exists():
+                        st.session_state.leaf_image = Image.open(p).convert("RGB")
+                        st.session_state.leaf_image_id = "sample_potato_early_blight"
+                        st.session_state.selected_crop_filter = "Potato"
+                        st.session_state.leaf_result = None
+                        st.session_state.cam_result = None
+                        st.session_state.gemini_vision_res = None
+                        st.rerun()
+                if st.button("🍃 Tomato: Healthy Leaf", use_container_width=True, key="smpl_t_hl"):
+                    p = Path(__file__).resolve().parent / "assets/samples/tomato_healthy.jpg"
+                    if p.exists():
+                        st.session_state.leaf_image = Image.open(p).convert("RGB")
+                        st.session_state.leaf_image_id = "sample_tomato_healthy"
+                        st.session_state.selected_crop_filter = "Tomato"
+                        st.session_state.leaf_result = None
+                        st.session_state.cam_result = None
+                        st.session_state.gemini_vision_res = None
+                        st.rerun()
 
+            st.markdown("<div style='height: 0.6rem;'></div>", unsafe_allow_html=True)
+
+            # Target Crop Species Filter
+            crop_options = [
+                "🔍 Auto-Detect (All 14 Crops)",
+                "Tomato",
+                "Potato",
+                "Apple",
+                "Grape",
+                "Corn_(maize)",
+                "Pepper,_bell",
+                "Strawberry",
+                "Peach",
+                "Orange",
+                "Soybean",
+                "Squash",
+                "Cherry",
+            ]
+            c_idx = 0
+            if st.session_state.selected_crop_filter in crop_options:
+                c_idx = crop_options.index(st.session_state.selected_crop_filter)
+
+            selected_crop_choice = st.selectbox(
+                "🌾 Target Crop Species (Eliminates false cross-crop detections):",
+                options=crop_options,
+                index=c_idx,
+                key="crop_filter_select",
+                help="Conditioning inference on your known crop species prevents cross-species false positives.",
+            )
+            st.session_state.selected_crop_filter = selected_crop_choice
+
+            st.markdown("#### 📷 Leaf Image Acquisition")
             input_mode = st.radio(
                 "Acquisition Method:",
                 options=["📁 Upload Image", "📸 Take Photo with Camera"],
@@ -877,6 +952,7 @@ def render_screen2():
                     st.session_state.leaf_image_id = new_source_id
                     st.session_state.leaf_result = None
                     st.session_state.cam_result = None
+                    st.session_state.gemini_vision_res = None
                 except Exception as e:
                     st.error(f"Image decoding failed: {e}")
 
@@ -892,6 +968,7 @@ def render_screen2():
                         st.session_state.leaf_image_id = None
                         st.session_state.leaf_result = None
                         st.session_state.cam_result = None
+                        st.session_state.gemini_vision_res = None
                         st.rerun()
 
                 if run_screening:
@@ -899,16 +976,18 @@ def render_screen2():
                         try:
                             from src.cropcare.image_engine import predict_image
 
-                            res = predict_image(st.session_state.leaf_image)
+                            crop_filt = None if "Auto-Detect" in selected_crop_choice else selected_crop_choice
+                            res = predict_image(st.session_state.leaf_image, crop_filter=crop_filt)
                             st.session_state.leaf_result = res
 
                             # Run Grad-CAM heatmap
                             cam_res = generate_gradcam(st.session_state.leaf_image)
                             st.session_state.cam_result = cam_res
+                            st.session_state.gemini_vision_res = None
                         except Exception as inf_err:
                             st.error(f"Inference execution error: {inf_err}")
             else:
-                st.info("Please select a leaf photograph above or take a live camera shot to begin.")
+                st.info("Please select a sample leaf above, upload an image, or take a live camera shot.")
 
         with leaf_col_right:
             st.markdown("#### 🔬 Neural Diagnostic Output")
@@ -934,7 +1013,11 @@ def render_screen2():
 
                 trans_crop, trans_disease = translate_diagnosis(crop, disease, lang=curr_lang)
 
-                tab_diag, tab_cam = st.tabs(["📋 Diagnosis Overview", "🔥 Grad-CAM Explainability"])
+                tab_diag, tab_cam, tab_gemini = st.tabs([
+                    "📋 Primary Diagnosis",
+                    "🔥 Grad-CAM Heatmap",
+                    "🤖 AI Second Opinion (Gemini Vision)",
+                ])
 
                 with tab_diag:
                     st.markdown(
@@ -949,18 +1032,26 @@ def render_screen2():
                                 <div style="font-size: 1.1rem; font-weight: 700; color: #123D2A;">{conf*100:.1f}%</div>
                             </div>
                             <div style="background: #E5EBE7; border-radius: 8px; height: 8px; overflow: hidden;">
-                                <div style="background: var(--forest-dark); height: 100%; width: {conf*100:.1f}%;"></div>
+                                <div style="background: var(--forest-dark); height: 100%; width: {min(100.0, conf*100):.1f}%;"></div>
                             </div>
                             <div style="margin-top: 0.8rem; font-size: 0.78rem; color: #526E60;">
-                                ⚡ Inference latency: <strong>{latency:.1f} ms</strong> on CPU
+                                ⚡ Inference latency: <strong>{latency:.1f} ms</strong> on CPU {'• Crop-Constrained' if res.get('crop_constrained') else ''}
                             </div>
                         </div>
                         """,
                         unsafe_allow_html=True,
                     )
 
+                    # Top alternative candidates
+                    if res.get("top_candidates") and len(res["top_candidates"]) > 1:
+                        st.markdown("##### 📊 Top Diagnostic Candidates:")
+                        for cand in res["top_candidates"]:
+                            c_pct = cand["confidence"] * 100
+                            st.write(f"• **{cand['crop']} — {cand['disease']}**: {c_pct:.1f}%")
+                            st.progress(min(1.0, max(0.0, cand["confidence"])))
+
                     if uncert:
-                        st.warning("⚠️ **Low Confidence Flag:** Model uncertainty is elevated. Visual symptoms may be ambiguous; physical field inspection is recommended.")
+                        st.warning("⚠️ **Low Confidence Flag:** Model uncertainty is elevated. Visual symptoms may be ambiguous; physical field inspection or Gemini Vision verification is recommended.")
                     else:
                         st.success("✅ **Calibrated Confidence:** Optical symptoms closely match trained botanical benchmarks.")
 
@@ -982,6 +1073,41 @@ def render_screen2():
                             display_image(cam_data["overlay_image"], caption="Grad-CAM Attention Heatmap")
                     else:
                         st.info("Grad-CAM visualization will generate upon running screening.")
+
+                with tab_gemini:
+                    st.markdown(
+                        """
+                        <div class="tips-box">
+                            <strong>Dual-AI Agronomic Architecture:</strong> While MobileNetV3 runs locally in 15ms, Google Gemini Multimodal Vision verifies leaf morphology, lesion borders, and chlorotic margins to eliminate laboratory background artifacts.
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    if st.button("🔬 Request Gemini Multimodal Second Opinion", type="primary", key="btn_run_gemini_vision", use_container_width=True):
+                        with st.spinner("Gemini Multimodal Vision analyzing leaf lesions and morphology..."):
+                            v_res = verify_leaf_with_gemini_vision(
+                                st.session_state.leaf_image,
+                                predicted_crop=res.get("crop"),
+                                predicted_disease=res.get("disease"),
+                            )
+                            st.session_state.gemini_vision_res = v_res
+                            st.rerun()
+
+                    if st.session_state.gemini_vision_res:
+                        gv = st.session_state.gemini_vision_res
+                        st.markdown(
+                            f"""
+                            <div class="diagnostic-panel" style="border-left: 5px solid #1B543A; margin-top: 1rem;">
+                                <div style="font-size: 0.8rem; font-weight: 700; color: #123D2A; text-transform: uppercase; margin-bottom: 0.6rem;">
+                                    🤖 Gemini Multimodal Clinical Evaluation
+                                </div>
+                                <div style="font-size: 0.92rem; color: #11231B; line-height: 1.6;">
+                                    {gv.get("analysis", "")}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
                 # Vernacular Audio Script
                 audio_script = generate_audio_script(crop, disease, conf, "Aligned", "Review guidance", lang=curr_lang)
@@ -1601,6 +1727,7 @@ def render_screen4():
                 st.session_state.leaf_image_id = None
                 st.session_state.leaf_result = None
                 st.session_state.cam_result = None
+                st.session_state.gemini_vision_res = None
                 st.session_state.climate_result = None
                 st.rerun()
 

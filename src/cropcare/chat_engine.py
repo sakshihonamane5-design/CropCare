@@ -2,7 +2,7 @@
 
 Provides agronomic chatbot intelligence powered by the Google Gemini API,
 integrating real-time session context (optical leaf predictions and climate anomalies)
-with strict agricultural safety protocols.
+with strict agricultural safety protocols, plus Gemini Multimodal Vision verification.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 from typing import Any, Dict, List, Optional
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -35,15 +36,7 @@ SUGGESTED_PROMPTS = [
 
 
 def get_gemini_api_key() -> Optional[str]:
-    """Retrieve the Gemini API key from Streamlit secrets or environment variables.
-
-    Precedence:
-    1. st.secrets['GEMINI_API_KEY']
-    2. os.environ['GEMINI_API_KEY']
-
-    Never prints, logs, or exposes the key value.
-    """
-    # 1. Attempt Streamlit secrets
+    """Retrieve the Gemini API key from Streamlit secrets or environment variables."""
     try:
         import streamlit as st
 
@@ -54,7 +47,6 @@ def get_gemini_api_key() -> Optional[str]:
     except Exception:
         pass
 
-    # 2. Attempt environment variable fallback
     env_key = os.environ.get("GEMINI_API_KEY")
     if env_key and env_key.strip():
         return env_key.strip()
@@ -99,7 +91,7 @@ def build_agronomic_context(
     lines: List[str] = [
         f"Active Application Step: {active_screen_name}",
         "",
-        "--- Optical Leaf Screening Status ---",
+        "--- Leaf Vision Screening Assessment ---",
     ]
 
     if leaf_result and leaf_result.get("predicted_class"):
@@ -115,6 +107,7 @@ def build_agronomic_context(
         lines.append(f"Detected Visual Condition: {disease}")
         lines.append(f"Statistical Confidence: {conf * 100:.1f}%")
         lines.append(f"Uncertainty Flag: {'TRUE (Low confidence / Ambiguous visual)' if uncertain else 'FALSE'}")
+
         if warnings:
             lines.append("Model Advisories: " + " | ".join(warnings))
 
@@ -172,22 +165,10 @@ def generate_chat_response(
     client: Optional[Any] = None,
     model_name: Optional[str] = None,
 ) -> str:
-    """Generate an agronomic response using the official google-genai SDK.
-
-    Args:
-        messages: List of conversation turn dicts with 'role' ('user'|'assistant') and 'content'.
-        context_str: Structured session state description.
-        api_key: Gemini API key string (if client is not pre-provided).
-        client: Pre-instantiated google.genai.Client (useful for testing and dependency injection).
-        model_name: Name of Gemini model to query.
-
-    Returns:
-        String reply suitable for display in the chat UI.
-    """
+    """Generate an agronomic response using the official google-genai SDK."""
     if not messages:
         return "How can I assist you with your crops today? You can ask about leaf symptoms, climate anomalies, or screening instructions."
 
-    # Verify API key availability
     resolved_key = api_key or get_gemini_api_key()
     if not resolved_key and client is None:
         return (
@@ -201,7 +182,6 @@ def generate_chat_response(
 
     resolved_model = model_name or get_configured_model()
 
-    # Instantiate client if not provided
     if client is None:
         try:
             from google import genai
@@ -211,7 +191,6 @@ def generate_chat_response(
             logger.exception("Failed to initialize Google GenAI Client")
             return f"⚠️ Unable to initialize Google Gemini client: {e}"
 
-    # Build prompt contents with recent history (last 10 turns to avoid token overflow)
     recent_turns = messages[-10:]
     formatted_contents: List[Any] = []
     for turn in recent_turns:
@@ -250,3 +229,81 @@ def generate_chat_response(
             return "⚠️ **Network Timeout:** Could not establish a connection to the Gemini API. Please check your internet connection."
 
         return f"⚠️ **Assistant Error:** The AI assistant encountered an issue while generating a response. ({type(api_err).__name__})"
+
+
+def verify_leaf_with_gemini_vision(
+    image: Image.Image,
+    predicted_crop: Optional[str] = None,
+    predicted_disease: Optional[str] = None,
+    api_key: Optional[str] = None,
+    client: Optional[Any] = None,
+    model_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Provide multimodal AI second opinion on a leaf photograph using Gemini Vision.
+
+    Evaluates visual symptoms, verifies crop and pathology independently of the
+    benchmark CNN, and identifies false positives caused by laboratory background shifts.
+    """
+    resolved_key = api_key or get_gemini_api_key()
+    if not resolved_key and client is None:
+        return {
+            "status": "API_KEY_REQUIRED",
+            "verified": False,
+            "analysis": (
+                "⚠️ **Gemini Vision Verification Unavailable:** "
+                "Set `GEMINI_API_KEY` in `.streamlit/secrets.toml` or environment variables to enable "
+                "real-time multimodal AI leaf verification."
+            ),
+        }
+
+    resolved_model = model_name or get_configured_model()
+
+    if client is None:
+        try:
+            from google import genai
+
+            client = genai.Client(api_key=resolved_key)
+        except Exception as e:
+            return {
+                "status": "CLIENT_ERROR",
+                "verified": False,
+                "analysis": f"Failed to initialize Gemini Vision: {e}",
+            }
+
+    prompt = (
+        "You are an expert plant pathologist and precision agronomist. "
+        "Analyze this plant leaf photograph thoroughly.\n\n"
+        f"Preliminary Edge Model Output:\n"
+        f"- Candidate Crop: {predicted_crop or 'Unknown'}\n"
+        f"- Candidate Condition: {predicted_disease or 'Unknown'}\n\n"
+        "Provide your clinical evaluation:\n"
+        "1. Crop Species: Identify the exact or most probable crop species.\n"
+        "2. Leaf Condition: Identify the disease (or if the leaf is healthy).\n"
+        "3. Morphological Symptoms: Describe what you see (e.g. concentric target rings, water-soaked margins, chlorosis, pustules, necrotic spots, or uniform green lamina).\n"
+        "4. Model Consensus: State whether you AGREE, PARTIALLY AGREE, or DISAGREE with the preliminary Edge Model output.\n"
+        "5. Immediate Action: Give 1-2 practical field steps for the grower.\n\n"
+        "Format your answer with clean Markdown headers and bullet points."
+    )
+
+    try:
+        response = client.models.generate_content(
+            model=resolved_model,
+            contents=[image, prompt],
+        )
+        if response and response.text:
+            return {
+                "status": "SUCCESS",
+                "verified": True,
+                "analysis": response.text.strip(),
+            }
+        return {
+            "status": "EMPTY_RESPONSE",
+            "verified": False,
+            "analysis": "Gemini Vision returned an empty response.",
+        }
+    except Exception as e:
+        return {
+            "status": "ERROR",
+            "verified": False,
+            "analysis": f"Vision analysis encountered an error: {e}",
+        }

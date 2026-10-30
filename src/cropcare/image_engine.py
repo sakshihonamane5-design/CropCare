@@ -3,7 +3,8 @@
 This module provides plant leaf disease screening from uploaded photographs using
 a MobileNetV3-Small transfer-learning model trained on the PlantVillage dataset.
 It provides prediction of crop species, disease/condition status, calibrated confidence,
-class probability distributions, image quality screening, and explicit uncertainty indicators.
+class probability distributions, crop-constrained filtering, image quality screening,
+and explicit uncertainty indicators.
 
 Scientific Disclaimers & Ethics:
 1. PlantVillage is a laboratory/benchmark dataset; strong performance on it does not guarantee
@@ -34,7 +35,7 @@ logger = logging.getLogger(__name__)
 # Default model artifacts
 DEFAULT_MODEL_PATH = "models/plantvillage_mobilenetv3.pth"
 DEFAULT_CLASS_MAPPING_PATH = "models/class_mapping.json"
-DEFAULT_CONFIDENCE_THRESHOLD = 0.55  # Below this threshold, mark prediction as uncertain
+DEFAULT_CONFIDENCE_THRESHOLD = 0.50  # Calibrated threshold for uncertainty flagging
 MIN_IMAGE_DIMENSION = 32
 BLANK_IMAGE_STD_THRESHOLD = 5.0
 
@@ -56,6 +57,8 @@ def _get_empty_prediction_schema(
         "disease": None,
         "confidence": 0.0,
         "probabilities": {},
+        "top_candidates": [],
+        "crop_constrained": False,
         "uncertain": True,
         "model_name": model_name,
         "warnings": warnings,
@@ -120,14 +123,7 @@ def get_model(
 
 
 def check_image_quality(image: Image.Image) -> List[str]:
-    """Perform input image sanity checks (dimensions, blankness, contrast).
-
-    Args:
-        image: Decoded PIL image.
-
-    Returns:
-        List of warning strings. Empty list indicates good visual sanity.
-    """
+    """Perform input image sanity checks (dimensions, blankness, contrast)."""
     warnings: List[str] = []
 
     width, height = image.size
@@ -167,33 +163,17 @@ def predict_image(
     model_path: str = DEFAULT_MODEL_PATH,
     mapping_path: str = DEFAULT_CLASS_MAPPING_PATH,
     confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+    crop_filter: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Screen a leaf photograph and predict plant health status.
 
-    This is the primary public interface for the Leaf Image Intelligence Module.
-    It guarantees a stable dictionary output schema and will never raise uncaught
-    exceptions on bad images or missing checkpoints.
-
-    Output Contract:
-    {
-        "predicted_class": "Tomato___Early_blight",
-        "crop": "Tomato",
-        "disease": "Early blight",
-        "confidence": 0.874,
-        "probabilities": {
-            "Tomato___Early_blight": 0.874,
-            ...
-        },
-        "uncertain": False,
-        "model_name": "MobileNetV3-Small-PlantVillage",
-        "warnings": []
-    }
-
-    Args:
+    Parameters:
         image: Leaf image represented as PIL Image, file path string/Path, raw bytes, or numpy array.
         model_path: Path to model checkpoint .pth file.
         mapping_path: Path to class_mapping.json.
-        confidence_threshold: Threshold below which uncertainty is flagged (default: 0.55).
+        confidence_threshold: Threshold below which uncertainty is flagged (default: 0.50).
+        crop_filter: Optional crop name filter (e.g. 'Tomato', 'Potato', 'Apple') to condition
+                     inference and prevent cross-species false positives.
 
     Returns:
         Structured prediction dictionary complying with the contract.
@@ -259,9 +239,70 @@ def predict_image(
             p = float(probs[idx])
             prob_dict[cls_name] = round(p, 4) if math.isfinite(p) else 0.0
 
-        top_idx = int(np.argmax(probs))
-        top_class = classes[top_idx]
-        top_confidence = float(probs[top_idx])
+        # Check for crop constraint filter
+        active_crop_filter = crop_filter.strip() if (crop_filter and str(crop_filter).strip()) else None
+        if active_crop_filter and active_crop_filter.lower() in ("auto-detect", "auto-detect (all crops)", "all", "none"):
+            active_crop_filter = None
+
+        if active_crop_filter:
+            # Match classes belonging to requested crop
+            c_lower = active_crop_filter.lower()
+            matching_indices = [
+                i for i, c in enumerate(classes)
+                if c_lower in c.lower() or c_lower in class_details.get(c, {}).get("crop", "").lower()
+            ]
+
+            if matching_indices:
+                subset_sum = sum(float(probs[i]) for i in matching_indices)
+                top_idx = max(matching_indices, key=lambda i: probs[i])
+                top_class = classes[top_idx]
+                top_confidence = (float(probs[top_idx]) / subset_sum) if subset_sum > 0 else float(probs[top_idx])
+
+                result["crop_constrained"] = True
+
+                # Top candidates within filtered crop
+                sorted_crop_indices = sorted(matching_indices, key=lambda i: probs[i], reverse=True)[:3]
+                top_candidates = []
+                for i in sorted_crop_indices:
+                    cls_k = classes[i]
+                    c_prob = (float(probs[i]) / subset_sum) if subset_sum > 0 else float(probs[i])
+                    d_name = class_details.get(cls_k, {}).get("disease") or cls_k.split("___")[-1].replace("_", " ")
+                    top_candidates.append({
+                        "class": cls_k,
+                        "crop": class_details.get(cls_k, {}).get("crop") or cls_k.split("___")[0].replace("_", " "),
+                        "disease": d_name,
+                        "confidence": round(c_prob, 4),
+                    })
+                result["top_candidates"] = top_candidates
+            else:
+                # Fallback to unconstrained
+                top_idx = int(np.argmax(probs))
+                top_class = classes[top_idx]
+                top_confidence = float(probs[top_idx])
+                sorted_indices = np.argsort(probs)[::-1][:3]
+                result["top_candidates"] = [
+                    {
+                        "class": classes[i],
+                        "crop": class_details.get(classes[i], {}).get("crop") or classes[i].split("___")[0].replace("_", " "),
+                        "disease": class_details.get(classes[i], {}).get("disease") or classes[i].split("___")[-1].replace("_", " "),
+                        "confidence": round(float(probs[i]), 4),
+                    }
+                    for i in sorted_indices
+                ]
+        else:
+            top_idx = int(np.argmax(probs))
+            top_class = classes[top_idx]
+            top_confidence = float(probs[top_idx])
+            sorted_indices = np.argsort(probs)[::-1][:3]
+            result["top_candidates"] = [
+                {
+                    "class": classes[i],
+                    "crop": class_details.get(classes[i], {}).get("crop") or classes[i].split("___")[0].replace("_", " "),
+                    "disease": class_details.get(classes[i], {}).get("disease") or classes[i].split("___")[-1].replace("_", " "),
+                    "confidence": round(float(probs[i]), 4),
+                }
+                for i in sorted_indices
+            ]
 
         if not math.isfinite(top_confidence):
             result["warnings"].append("Non-finite probability encountered during inference.")
