@@ -515,6 +515,17 @@ def predict_image(
                 result["crop"] = details.get("crop") or selected_crop_key.replace("_", " ")
                 result["disease"] = details.get("disease") or top_class.split("___")[-1].replace("_", " ")
 
+                sorted_crop_indices = sorted(crop_indices, key=lambda i: probs[i], reverse=True)[:3]
+                result["top_candidates"] = [
+                    {
+                        "class": classes[i],
+                        "crop": class_details.get(classes[i], {}).get("crop") or selected_crop_key.replace("_", " "),
+                        "disease": class_details.get(classes[i], {}).get("disease") or classes[i].split("___")[-1].replace("_", " "),
+                        "confidence": round(float(probs[i]), 4),
+                    }
+                    for i in sorted_crop_indices
+                ]
+
                 if confidence_threshold != DEFAULT_CONFIDENCE_THRESHOLD:
                     effective_thresh = confidence_threshold
                 else:
@@ -585,6 +596,17 @@ def predict_image(
         details = class_details.get(top_class, {})
         result["crop"] = details.get("crop") or top_class.split("___")[0].replace("_", " ")
         result["disease"] = details.get("disease") or top_class.split("___")[-1].replace("_", " ")
+
+        sorted_indices = np.argsort(probs)[::-1][:3]
+        result["top_candidates"] = [
+            {
+                "class": classes[i],
+                "crop": class_details.get(classes[i], {}).get("crop") or classes[i].split("___")[0].replace("_", " "),
+                "disease": class_details.get(classes[i], {}).get("disease") or classes[i].split("___")[-1].replace("_", " "),
+                "confidence": round(float(probs[i]), 4),
+            }
+            for i in sorted_indices
+        ]
 
         if confidence_threshold != DEFAULT_CONFIDENCE_THRESHOLD:
             effective_thresh = confidence_threshold
