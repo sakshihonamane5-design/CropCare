@@ -5,6 +5,12 @@ from src.cropcare.agronomy_engine import (
     classify_disease_severity,
     get_nurturing_recommendations,
 )
+from src.cropcare.evaluation_engine import (
+    get_benchmark_summary,
+    get_crop_wise_benchmarks,
+    get_stress_test_ablation,
+    get_top_confusion_pairs,
+)
 from src.cropcare.multilingual import (
     SUPPORTED_LANGUAGES,
     generate_audio_speech_html,
@@ -46,4 +52,8 @@ __all__ = [
     "t",
     "generate_audio_speech_html",
     "translate_advisory_text",
+    "get_benchmark_summary",
+    "get_crop_wise_benchmarks",
+    "get_top_confusion_pairs",
+    "get_stress_test_ablation",
 ]

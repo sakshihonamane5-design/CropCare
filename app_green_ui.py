@@ -30,6 +30,12 @@ from src.cropcare.image_engine import (
     predict_image,
     register_field_leaf,
 )
+from src.cropcare.evaluation_engine import (
+    get_benchmark_summary,
+    get_crop_wise_benchmarks,
+    get_stress_test_ablation,
+    get_top_confusion_pairs,
+)
 from src.cropcare.multilingual import (
     SUPPORTED_LANGUAGES,
     generate_audio_speech_html,
@@ -68,17 +74,27 @@ st.markdown(
         --shadow-hero: 0 20px 40px -10px rgba(18, 61, 42, 0.25);
     }
 
+    *, *::before, *::after {
+        box-sizing: border-box !important;
+    }
+
     html, body, [class*="css"] {
         font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
         color: var(--text-dark);
         background-color: var(--ivory-bg);
+        overflow-x: hidden !important;
     }
 
-    /* Main container max-width and padding */
+    /* Main container max-width and fluid padding (Prevents Edge Cutting) */
     .block-container {
-        max-width: 1140px;
-        padding-top: 2rem;
-        padding-bottom: 3rem;
+        max-width: 1240px !important;
+        width: 100% !important;
+        padding-top: 1.2rem !important;
+        padding-bottom: 2.8rem !important;
+        padding-left: 1.25rem !important;
+        padding-right: 1.25rem !important;
+        box-sizing: border-box !important;
+        overflow-x: hidden !important;
     }
 
     /* Top Navigation Brand Bar */
@@ -86,12 +102,14 @@ st.markdown(
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0.8rem 1.5rem;
+        padding: 0.8rem 1.4rem;
         background: var(--surface-white);
         border: 1px solid var(--border-subtle);
         border-radius: 16px;
         box-shadow: var(--shadow-card);
-        margin-bottom: 1.8rem;
+        margin-bottom: 1.4rem;
+        width: 100%;
+        box-sizing: border-box;
     }
     .brand-logo {
         display: flex;
@@ -115,7 +133,7 @@ st.markdown(
         border: 1px solid rgba(183, 230, 107, 0.5);
     }
 
-    /* Step Progress Indicator */
+    /* Step Progress Indicator (Fluid Responsive) */
     .step-progress-wrapper {
         display: flex;
         align-items: center;
@@ -124,8 +142,11 @@ st.markdown(
         border: 1px solid var(--border-subtle);
         border-radius: 16px;
         padding: 0.75rem 1.25rem;
-        margin-bottom: 2rem;
+        margin-bottom: 1.8rem;
         box-shadow: var(--shadow-card);
+        width: 100%;
+        box-sizing: border-box;
+        overflow-x: auto;
     }
     .step-item {
         display: flex;
@@ -135,6 +156,7 @@ st.markdown(
         font-weight: 600;
         color: var(--text-muted);
         text-decoration: none;
+        white-space: nowrap;
     }
     .step-item.active {
         color: var(--forest-dark);
@@ -151,6 +173,7 @@ st.markdown(
         background: #E8ECE6;
         color: #6E8578;
         font-weight: 700;
+        flex-shrink: 0;
     }
     .step-item.active .step-pill {
         background: var(--forest-dark);
@@ -163,9 +186,10 @@ st.markdown(
     }
     .step-divider {
         flex: 1;
+        min-width: 12px;
         height: 2px;
         background: #E8ECE6;
-        margin: 0 0.8rem;
+        margin: 0 0.6rem;
     }
     .step-divider.active {
         background: var(--forest-dark);
@@ -176,12 +200,14 @@ st.markdown(
         background: linear-gradient(135deg, #123D2A 0%, #1A543A 55%, #103222 100%);
         color: #FFFFFF;
         border-radius: 24px;
-        padding: 3rem 2.8rem;
+        padding: 2.2rem 2rem;
         box-shadow: var(--shadow-hero);
         position: relative;
         overflow: hidden;
-        margin-bottom: 2rem;
+        margin-bottom: 1.8rem;
         border: 1px solid rgba(183, 230, 107, 0.2);
+        width: 100%;
+        box-sizing: border-box;
     }
     .hero-badge {
         display: inline-flex;
@@ -247,6 +273,8 @@ st.markdown(
         gap: 0.85rem;
         position: relative;
         overflow: hidden;
+        width: 100%;
+        box-sizing: border-box;
         transition: transform 0.25s ease, box-shadow 0.25s ease;
     }
     .farmer-hero-card:hover {
@@ -729,6 +757,11 @@ if st.session_state.screen == 1:
                 st.session_state.screen = 2
                 st.rerun()
 
+        st.markdown("<div style='height: 0.3rem;'></div>", unsafe_allow_html=True)
+        if st.button("📊 Model Benchmark Metrics & Class Error Analysis (For Judges) →", type="secondary", use_container_width=True):
+            st.session_state.screen = 2
+            st.rerun()
+
     with hero_col_right:
         # Realistic Indian farmer inspecting crops in a green agricultural field
         farmer_img_uri = get_image_base64("assets/farmer_hero.jpg")
@@ -821,10 +854,11 @@ elif st.session_state.screen == 2:
         unsafe_allow_html=True,
     )
 
-    tab_screening, tab_studio, tab_library = st.tabs([
+    tab_screening, tab_studio, tab_library, tab_evaluation = st.tabs([
         "🍃 1. Diagnostic Leaf Screening",
         "🧠 2. Continual Learning Studio (Upload & Teach Model)",
         "📚 3. Monitored Crops Library (14 Species, 38 Pathologies)",
+        "📊 4. Model Evaluation & Error Analysis (For Judges)",
     ])
 
     # --------------------------------------------------------------------------
@@ -971,6 +1005,7 @@ elif st.session_state.screen == 2:
                 )
                 if active_file is not None:
                     new_source_id = f"camera_{active_file.name}_{active_file.size}"
+
 
             if active_file is not None and new_source_id != st.session_state.leaf_image_id:
                 try:
@@ -1464,6 +1499,224 @@ elif st.session_state.screen == 2:
                     unsafe_allow_html=True,
                 )
             c_idx += 1
+
+    # --------------------------------------------------------------------------
+    # TAB 4: MODEL EVALUATION & ERROR ANALYSIS (FOR JUDGES)
+    # --------------------------------------------------------------------------
+    with tab_evaluation:
+        st.markdown(
+            """
+            <div class="crop-meta-box" style="border-left: 4px solid var(--forest-dark); margin-bottom: 1.2rem;">
+                <h4 style="color: var(--forest-dark); margin-bottom: 0.3rem;">📊 Empirical Model Evaluation & Error Analysis</h4>
+                <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 0;">
+                    Rigorous evaluation across 10,861 held-out test images (PlantVillage Benchmark).
+                    Reporting overall metrics, class-wise errors, biological confusion pairs, and stress perturbations
+                    for <strong>lighting variations</strong>, <strong>sensor blur/quality</strong>, and <strong>unseen conditions</strong>.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        b_summary = get_benchmark_summary()
+        e_kpi1, e_kpi2, e_kpi3, e_kpi4, e_kpi5 = st.columns(5)
+        with e_kpi1:
+            st.metric("Overall Accuracy", f"{b_summary['overall_accuracy']}%", "Top-1 Precision")
+        with e_kpi2:
+            st.metric("Macro F1-Score", f"{b_summary['macro_f1']}%", "38 Classes")
+        with e_kpi3:
+            st.metric("Top-3 Accuracy", f"{b_summary['top3_accuracy']}%", "Consensus")
+        with e_kpi4:
+            st.metric("CPU Latency", f"{b_summary['avg_cpu_latency_ms']} ms", "Edge Optimized")
+        with e_kpi5:
+            st.metric("Footprint", f"{b_summary['model_footprint_mb']} MB", "MobileNetV3")
+
+        st.markdown("<div style='height: 0.8rem;'></div>", unsafe_allow_html=True)
+
+        eval_sub1, eval_sub2, eval_sub3, eval_sub4 = st.tabs([
+            "🎯 1. Crop Performance Breakdown",
+            "⚠️ 2. Class Confusion & Errors",
+            "🔬 3. Lighting & Blur Stress Tests",
+            "🧠 4. Unseen Conditions & OOD Defense",
+        ])
+
+        with eval_sub1:
+            st.markdown("##### 🌾 Class & Crop-Wise Empirical Performance (10,861 Test Images)")
+            crop_bench = get_crop_wise_benchmarks()
+
+            selected_eval_crop = st.selectbox(
+                "Filter Performance by Crop Species:",
+                options=["All Crops Overview"] + list(crop_bench.keys()),
+                key="eval_crop_filter",
+            )
+
+            if selected_eval_crop == "All Crops Overview":
+                eval_df_data = []
+                for crp, dt in crop_bench.items():
+                    eval_df_data.append({
+                        "Crop Species": crp.replace("_", " "),
+                        "Monitored Classes": dt["num_classes"],
+                        "Test Samples": dt["test_samples"],
+                        "Accuracy (%)": f"{dt['accuracy']:.2f}%",
+                        "Precision (%)": f"{dt['precision']:.2f}%",
+                        "Recall (%)": f"{dt['recall']:.2f}%",
+                        "F1-Score (%)": f"{dt['f1_score']:.2f}%",
+                        "Primary Error / Confusion Mode": dt["top_confusion"],
+                    })
+                st.dataframe(pd.DataFrame(eval_df_data), use_container_width=True, hide_index=True)
+            else:
+                cd = crop_bench[selected_eval_crop]
+                st.markdown(
+                    f"""
+                    <div style="background: #F8FAF7; border: 1.5px solid #CCD7D0; border-radius: 14px; padding: 1.2rem; margin-top: 0.6rem;">
+                        <div style="font-size: 1.2rem; font-weight: 700; color: #123D2A; margin-bottom: 0.4rem;">
+                            🌾 {selected_eval_crop.replace('_', ' ')} Performance Profile
+                        </div>
+                        <div style="display: flex; gap: 2rem; margin-bottom: 0.8rem; flex-wrap: wrap;">
+                            <div><strong>Test Samples:</strong> {cd['test_samples']}</div>
+                            <div><strong>Accuracy:</strong> {cd['accuracy']}%</div>
+                            <div><strong>Precision:</strong> {cd['precision']}%</div>
+                            <div><strong>Recall:</strong> {cd['recall']}%</div>
+                            <div><strong>F1-Score:</strong> {cd['f1_score']}%</div>
+                        </div>
+                        <div style="font-size: 0.88rem; color: #1B543A; background: #EBF8D3; padding: 0.6rem 0.9rem; border-radius: 8px;">
+                            ⚠️ <strong>Top Confusion Boundary:</strong> {cd['top_confusion']}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        with eval_sub2:
+            st.markdown("##### 🔍 Critical Class-Wise Errors & Biological Confusion Analysis")
+            st.caption("Addressing hackathon requirement: detailed report on class confusion and morphological root causes:")
+
+            conf_pairs = get_top_confusion_pairs()
+            for pair in conf_pairs:
+                st.markdown(
+                    f"""
+                    <div style="background: #FFFFFF; border: 1px solid rgba(18, 61, 42, 0.12); border-left: 4px solid #D97706; border-radius: 12px; padding: 1rem 1.2rem; margin-bottom: 0.85rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; gap: 0.5rem;">
+                            <div style="font-weight: 700; color: #123D2A; font-size: 0.96rem;">
+                                🎯 <strong>{pair['true_class'].replace('___', ' — ').replace('_', ' ')}</strong> 
+                                <span style="color: #9A3412;">⮂ Confused with ⮂</span> 
+                                <strong>{pair['predicted_class'].replace('___', ' — ').replace('_', ' ')}</strong>
+                            </div>
+                            <span style="background: #FEF3C7; color: #92400E; font-size: 0.8rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 12px;">
+                                {pair['error_pct']:.2f}% Error Rate
+                            </span>
+                        </div>
+                        <div style="font-size: 0.85rem; color: #374151; margin-bottom: 0.4rem; line-height: 1.45;">
+                            <strong>Biological Root Cause:</strong> {pair['biological_root_cause']}
+                        </div>
+                        <div style="font-size: 0.82rem; color: #15803D; line-height: 1.45;">
+                            🛡️ <strong>CropCare Engineering Mitigation:</strong> {pair['mitigation_strategy']}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown(
+                """
+                <div style="background: #EBF8D3; border: 1.5px solid #A3D95B; border-radius: 12px; padding: 1rem 1.2rem; margin-top: 1rem;">
+                    <div style="font-weight: 700; color: #123D2A; font-size: 0.95rem; margin-bottom: 0.3rem;">
+                        ⚡ How CropCare Subspace Isolation Eliminates 100% of Inter-Crop Confusions
+                    </div>
+                    <div style="font-size: 0.85rem; color: #1B543A; line-height: 1.5;">
+                        Standard computer vision architectures compute a global 38-way softmax, which frequently confuses cross-species Solanaceae diseases (e.g. Potato Early Blight mistaken for Tomato Early Blight).
+                        By allowing the farmer or agronomist to select their active crop, CropCare masks out irrelevant species logits, reducing inter-crop error to <strong>0.0%</strong>!
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with eval_sub3:
+            st.markdown("##### 🔬 Environmental Perturbations: Lighting & Image Quality Degradation")
+            st.caption("Empirical ablation testing model vulnerability to illumination shifts, shadows, and low-res camera optics:")
+
+            ablation_data = get_stress_test_ablation()
+
+            # 1. Lighting Variations
+            light_exp = ablation_data["lighting_variations"]
+            st.markdown(f"###### ☀️ {light_exp['title']}")
+            st.caption(light_exp['description'])
+
+            l_df = []
+            for row in light_exp["experiments"]:
+                l_df.append({
+                    "Lighting Condition Tested": row["condition"],
+                    "Baseline Model Accuracy": f"{row['baseline_accuracy']}%",
+                    "With CropCare 3-View TTA": f"{row['with_cropcare_tta']}%",
+                    "Net Accuracy Recovery": row["gain"],
+                    "Field Resilience Outcome": row["status"],
+                })
+            st.dataframe(pd.DataFrame(l_df), use_container_width=True, hide_index=True)
+            st.info(f"💡 **Key Finding:** {light_exp['key_takeaway']}")
+
+            # 2. Image Blur & Sensor Quality
+            st.markdown("<div style='height: 0.8rem;'></div>", unsafe_allow_html=True)
+            blur_exp = ablation_data["image_quality_blur"]
+            st.markdown(f"###### 📷 {blur_exp['title']}")
+            st.caption(blur_exp['description'])
+
+            b_df = []
+            for row in blur_exp["experiments"]:
+                b_df.append({
+                    "Image Degradation Condition": row["condition"],
+                    "Baseline Model Accuracy": f"{row['baseline_accuracy']}%",
+                    "With Subspace Isolation": f"{row['with_subspace_isolation']}%",
+                    "Net Accuracy Recovery": row["gain"],
+                    "Field Resilience Outcome": row["status"],
+                })
+            st.dataframe(pd.DataFrame(b_df), use_container_width=True, hide_index=True)
+            st.info(f"💡 **Key Finding:** {blur_exp['key_takeaway']}")
+
+        with eval_sub4:
+            st.markdown("##### 🧠 Unseen Conditions & Out-of-Distribution (OOD) Defense")
+            st.caption("Mitigating dangerous overconfidence when presented with unmonitored crops or novel field anomalies:")
+
+            ood_exp = ablation_data["unseen_conditions_ood"]
+            for ood_case in ood_exp["experiments"]:
+                st.markdown(
+                    f"""
+                    <div style="background: #FFFFFF; border: 1.5px solid #CCD7D0; border-radius: 12px; padding: 1rem 1.2rem; margin-bottom: 0.8rem;">
+                        <div style="font-weight: 700; color: #123D2A; font-size: 0.95rem; margin-bottom: 0.4rem;">
+                            🍂 Condition: {ood_case['condition']}
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.5rem; font-size: 0.84rem;">
+                            <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 0.6rem 0.8rem; color: #991B1B;">
+                                <strong>Standard Deep Learning Failure Mode:</strong><br>{ood_case['standard_cnn_behavior']}
+                            </div>
+                            <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 0.6rem 0.8rem; color: #166534;">
+                                <strong>CropCare Safeguard & Triage:</strong><br>{ood_case['cropcare_behavior']}
+                            </div>
+                        </div>
+                        <div style="font-size: 0.82rem; color: #1E40AF; background: #EFF6FF; padding: 0.5rem 0.8rem; border-radius: 8px;">
+                            🧠 <strong>Adaptive Solution:</strong> {ood_case['solution_mechanism']}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            st.success(f"🏆 **Engineering Synthesis:** {ood_exp['key_takeaway']}")
+
+        # Download Full Evaluation Report for Judges
+        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+        try:
+            with open("reports/model_metrics.json", "r", encoding="utf-8") as rf:
+                report_json_str = rf.read()
+            st.download_button(
+                label="📥 Download Complete Model Benchmark & Metrics Report (JSON)",
+                data=report_json_str,
+                file_name="cropcare_model_evaluation_metrics.json",
+                mime="application/json",
+                help="Download the complete benchmark suite, class-wise errors, and perturbation ablation tables.",
+            )
+        except Exception:
+            pass
 
     # Guided Screen 2 Navigation
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
