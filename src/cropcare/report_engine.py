@@ -1,4 +1,4 @@
-﻿"""CropCare ΓÇö Field Diagnostic Report Engine.
+"""CropCare — Field Diagnostic Report Engine.
 
 Generates self-contained, print-ready agronomic diagnostic reports in HTML/PDF format
 and Markdown summaries for field extension workers and farmers.
@@ -47,9 +47,9 @@ def generate_field_report_html(
     anom = climate_result.get("anomalies", {}) if climate_result else {}
     loc = climate_result.get("location", farm_location) if climate_result else farm_location
 
-    t_mean = f"{recent.get('mean_temperature_c'):.1f} ┬░C" if recent.get("mean_temperature_c") is not None else "N/A"
+    t_mean = f"{recent.get('mean_temperature_c'):.1f} °C" if recent.get("mean_temperature_c") is not None else "N/A"
     rain = f"{recent.get('rainfall_mm'):.1f} mm" if recent.get("rainfall_mm") is not None else "N/A"
-    t_anom = f"{anom.get('temperature_c'):+.1f} ┬░C" if anom.get("temperature_c") is not None else "N/A"
+    t_anom = f"{anom.get('temperature_c'):+.1f} °C" if anom.get("temperature_c") is not None else "N/A"
     p_anom = f"{anom.get('rainfall_mm'):+.1f} mm" if anom.get("rainfall_mm") is not None else "N/A"
 
     align_badge = alignment_result.get("badge", "N/A") if alignment_result else "N/A"
@@ -184,7 +184,7 @@ def generate_field_report_html(
 <div class="card">
   <div class="header">
     <div>
-      <div class="logo">≡ƒî▒ CropCareΓäó Intelligence</div>
+      <div class="logo">🌱 CropCare™ Intelligence</div>
       <div style="font-size: 13px; color: #526E60;">Climate-Aware Agronomic Screening & Advisory</div>
     </div>
     <div class="meta">
@@ -234,11 +234,11 @@ def generate_field_report_html(
     
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px;">
       <div>
-        <strong>≡ƒî╛ Cultural & Sanitation Tactics:</strong>
+        <strong>🌾 Cultural & Sanitation Tactics:</strong>
         <ul style="padding-left: 18px; margin: 4px 0;">{cult_items}</ul>
       </div>
       <div>
-        <strong>≡ƒº¬ Targeted Interventions (Subject to Verification):</strong>
+        <strong>🧪 Targeted Interventions (Subject to Verification):</strong>
         <ul style="padding-left: 18px; margin: 4px 0;">{bio_items}{chem_items}</ul>
       </div>
     </div>
@@ -250,7 +250,7 @@ def generate_field_report_html(
 
   <div class="no-print" style="margin-top: 24px; text-align: center;">
     <button onclick="window.print()" style="background: #123D2A; color: #FFFFFF; font-weight: 700; border: none; padding: 12px 28px; border-radius: 8px; cursor: pointer; font-size: 14px;">
-      ≡ƒû¿∩╕Å Print or Save as PDF
+      🖨️ Print or Save as PDF
     </button>
   </div>
 </div>

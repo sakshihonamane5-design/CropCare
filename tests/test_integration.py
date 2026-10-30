@@ -99,7 +99,7 @@ class TestEndToEndCropCarePipeline(unittest.TestCase):
             farmer_name="Shri Santosh Jadhav",
             farm_location="Pune, Maharashtra",
         )
-        self.assertIn("CropCareΓäó Intelligence", html_report)
+        self.assertIn("CropCare™ Intelligence", html_report)
         self.assertIn("Shri Santosh Jadhav", html_report)
         self.assertIn("window.print()", html_report)
 

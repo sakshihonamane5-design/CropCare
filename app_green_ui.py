@@ -60,8 +60,15 @@ try:
         build_whatsapp_share_url,
     )
     HAS_ADVISORY = True
-except ImportError:
+except Exception:
     HAS_ADVISORY = False
+    get_weather_smart_ipm = None
+    generate_recovery_roadmap = None
+
+    def build_whatsapp_share_url(crop: str, disease: str, confidence_pct: float, location_name: str, urgency: str) -> str:
+        import urllib.parse
+        msg = f"🌱 *CropCare Alert*\n• Crop: {crop}\n• Diagnosis: {disease} ({confidence_pct:.1f}%)\n• Location: {location_name}\n• Urgency: {urgency}"
+        return f"https://api.whatsapp.com/send?text={urllib.parse.quote(msg)}"
 
 try:
     from src.cropcare.location_engine import (
