@@ -350,3 +350,4 @@ def get_top_confusion_pairs() -> List[Dict[str, Any]]:
 def get_stress_test_ablation() -> Dict[str, Dict[str, Any]]:
     """Return empirical stress test findings covering lighting, quality, and unseen conditions."""
     return STRESS_TEST_ABLATION.copy()
+

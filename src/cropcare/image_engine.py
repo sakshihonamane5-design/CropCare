@@ -178,6 +178,15 @@ def _load_model_cached(
         return None, None, f"Failed to load PyTorch model from {model_path}: {e}"
 
 
+def get_model(
+    model_path: str = DEFAULT_MODEL_PATH,
+    mapping_path: str = DEFAULT_CLASS_MAPPING_PATH,
+) -> Tuple[Optional[nn.Module], Optional[Dict[str, Any]]]:
+    """Retrieve cached model and metadata mapping."""
+    model, meta, _ = _load_model_cached(model_path=model_path, mapping_path=mapping_path)
+    return model, meta
+
+
 def check_image_quality(image: Image.Image) -> List[str]:
     """Perform input image sanity checks (dimensions, blankness, contrast)."""
     warnings: List[str] = []

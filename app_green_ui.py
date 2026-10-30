@@ -43,6 +43,65 @@ from src.cropcare.multilingual import (
     translate_advisory_text,
 )
 
+# New engines from image-engine branch
+try:
+    from src.cropcare.economic_engine import estimate_economic_impact
+    HAS_ECONOMIC = True
+except ImportError:
+    HAS_ECONOMIC = False
+
+try:
+    from src.cropcare.advisory_engine import (
+        get_weather_smart_ipm,
+        generate_recovery_roadmap,
+        build_whatsapp_share_url,
+    )
+    HAS_ADVISORY = True
+except ImportError:
+    HAS_ADVISORY = False
+
+try:
+    from src.cropcare.location_engine import (
+        search_location_online,
+        search_location_offline,
+        get_states,
+        get_districts_for_state,
+        TOP_PRESET_LOCATIONS,
+        AGRI_DISTRICTS,
+    )
+    HAS_LOCATION = True
+except ImportError:
+    HAS_LOCATION = False
+    TOP_PRESET_LOCATIONS = {}
+
+try:
+    from src.cropcare.alignment_engine import compute_climate_alignment
+    HAS_ALIGNMENT = True
+except ImportError:
+    HAS_ALIGNMENT = False
+
+try:
+    from src.cropcare.explainability import generate_gradcam
+    HAS_GRADCAM = True
+except ImportError:
+    HAS_GRADCAM = False
+
+try:
+    from src.cropcare.report_engine import generate_field_report_html
+    HAS_REPORT = True
+except ImportError:
+    HAS_REPORT = False
+
+try:
+    from src.cropcare.ui_components import (
+        render_alignment_gauge,
+        render_spray_banner,
+    )
+    HAS_UI_COMPONENTS = True
+except ImportError:
+    HAS_UI_COMPONENTS = False
+
+
 # Configure page layout and title
 st.set_page_config(
     page_title="CropCare — Agronomic Intelligence",
@@ -854,11 +913,12 @@ elif st.session_state.screen == 2:
         unsafe_allow_html=True,
     )
 
-    tab_screening, tab_studio, tab_library, tab_evaluation = st.tabs([
+    tab_screening, tab_studio, tab_library, tab_gradcam, tab_evaluation = st.tabs([
         "🍃 1. Diagnostic Leaf Screening",
         "🧠 2. Continual Learning Studio (Upload & Teach Model)",
         "📚 3. Monitored Crops Library (14 Species, 38 Pathologies)",
-        "📊 4. Model Evaluation & Error Analysis (For Judges)",
+        "🔬 4. Grad-CAM Explainability (AI Vision)",
+        "📊 5. Model Evaluation & Error Analysis (For Judges)",
     ])
 
     # --------------------------------------------------------------------------
@@ -1304,13 +1364,18 @@ elif st.session_state.screen == 2:
                     # ==================================================================
                     # VOICE AGRONOMIST AUDIO ADVISORY (Hands-free Multilingual Player)
                     # ==================================================================
-                    audio_title, audio_text = translate_advisory_text(
+                    audio_text = translate_advisory_text(
                         crop=crop,
                         disease=disease,
-                        severity_stage=sev["stage_id"],
-                        confidence=conf,
+                        stage_name=sev["stage_name"],
+                        damage_pct=sev["damage_percentage"],
+                        irrigation_action=nurture["irrigation"]["action"],
+                        nutrition_action=nurture["nutrition"]["action"],
+                        sanitation_action=nurture["sanitation"]["action"],
+                        bio_action=nurture["bio_defense"]["action"],
                         lang=st.session_state.app_language,
                     )
+                    audio_title = f"CropCare Advisory — {crop} / {disease}"
                     audio_html = generate_audio_speech_html(
                         title=audio_title,
                         text_to_speak=audio_text,
@@ -1331,6 +1396,133 @@ elif st.session_state.screen == 2:
                         """,
                         unsafe_allow_html=True,
                     )
+
+                    # ==================================================================
+                    # ECONOMIC IMPACT ESTIMATOR
+                    # ==================================================================
+                    if HAS_ECONOMIC:
+                        st.markdown("---")
+                        st.markdown("#### 💰 Economic Impact Estimator")
+                        eco_col1, eco_col2 = st.columns([2, 1])
+                        with eco_col2:
+                            farm_acres = st.number_input(
+                                "Farm Size (Acres)", min_value=0.1, max_value=500.0,
+                                value=st.session_state.get("farm_acres", 1.0), step=0.5,
+                                key="farm_acres_input",
+                            )
+                            st.session_state["farm_acres"] = farm_acres
+                        with eco_col1:
+                            eco = estimate_economic_impact(
+                                crop_name=crop,
+                                disease_name=disease,
+                                confidence=conf,
+                                farm_acres=farm_acres,
+                            )
+                        st.markdown(
+                            f"""
+                            <div style="background:#FFFFFF;border:1.5px solid #D6E0D9;border-radius:14px;padding:1.1rem 1.3rem;margin-top:0.4rem;">
+                              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;">
+                                <span style="font-size:0.85rem;font-weight:700;color:#526E60;text-transform:uppercase;">Urgency Tier</span>
+                                <span style="font-weight:700;font-size:0.92rem;color:#123D2A;">{eco['urgency']}</span>
+                              </div>
+                              <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.8rem;text-align:center;">
+                                <div style="background:#F4F7F2;border-radius:10px;padding:0.7rem;">
+                                  <div style="font-size:0.72rem;font-weight:700;color:#526E60;text-transform:uppercase;">Yield Loss Range</div>
+                                  <div style="font-size:1.2rem;font-weight:800;color:#B45309;">{eco['loss_pct_range']}</div>
+                                </div>
+                                <div style="background:#F4F7F2;border-radius:10px;padding:0.7rem;">
+                                  <div style="font-size:0.72rem;font-weight:700;color:#526E60;text-transform:uppercase;">Revenue At Risk</div>
+                                  <div style="font-size:1.1rem;font-weight:800;color:#DC2626;">₹{eco['loss_value_max_inr']:,}</div>
+                                </div>
+                                <div style="background:#F4F7F2;border-radius:10px;padding:0.7rem;">
+                                  <div style="font-size:0.72rem;font-weight:700;color:#526E60;text-transform:uppercase;">Treatment Cost</div>
+                                  <div style="font-size:1.1rem;font-weight:800;color:#0369A1;">₹{eco['treatment_cost_inr']:,}</div>
+                                </div>
+                                <div style="background:#EBF8D3;border-radius:10px;padding:0.7rem;">
+                                  <div style="font-size:0.72rem;font-weight:700;color:#526E60;text-transform:uppercase;">ROI if Treated</div>
+                                  <div style="font-size:1.2rem;font-weight:800;color:#15803D;">{eco['roi_multiplier']}</div>
+                                </div>
+                              </div>
+                              <div style="font-size:0.82rem;color:#334155;margin-top:0.7rem;line-height:1.5;">{eco['description']}</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                    # ==================================================================
+                    # WEATHER-SMART IPM ADVISORY & RECOVERY ROADMAP
+                    # ==================================================================
+                    if HAS_ADVISORY:
+                        st.markdown("---")
+                        st.markdown("#### 🌿 Weather-Smart IPM Advisory")
+                        ipm = get_weather_smart_ipm(
+                            disease=disease,
+                            climate_result=st.session_state.get("climate_result"),
+                        )
+                        spray_w = ipm.get("spray_window", {})
+                        spray_badge = spray_w.get("badge", "🟡 Check Local Conditions")
+                        spray_advice = spray_w.get("advice", "")
+                        st.markdown(
+                            f"""
+                            <div style="background:#FFFFFF;border-left:5px solid #1B543A;border-radius:12px;padding:1rem 1.3rem;margin-bottom:1rem;">
+                              <div style="font-size:0.75rem;font-weight:700;color:#526E60;text-transform:uppercase;">Spray Application Window</div>
+                              <div style="font-size:1.1rem;font-weight:700;color:#123D2A;margin:0.3rem 0;">{spray_badge}</div>
+                              <div style="font-size:0.88rem;color:#334D3F;">{spray_advice}</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                        ipm_c1, ipm_c2, ipm_c3 = st.columns(3)
+                        with ipm_c1:
+                            st.markdown("**🌾 Cultural Practices**")
+                            for item in ipm.get("cultural", []):
+                                st.markdown(f"• {item}")
+                        with ipm_c2:
+                            st.markdown("**🧫 Biological Controls**")
+                            for item in ipm.get("biological", []):
+                                st.markdown(f"• {item}")
+                        with ipm_c3:
+                            st.markdown("**⚗️ Chemical Interventions**")
+                            for item in ipm.get("chemical", []):
+                                st.markdown(f"• {item}")
+
+                        # 7-Day Recovery Roadmap
+                        st.markdown("#### 📅 7-Day Recovery Roadmap")
+                        roadmap = generate_recovery_roadmap(
+                            crop=crop, disease=disease,
+                            spray_status=spray_w.get("status", "OPTIMAL"),
+                        )
+                        for step in roadmap:
+                            st.markdown(
+                                f"""
+                                <div style="display:flex;gap:1rem;align-items:flex-start;padding:0.6rem 0;border-bottom:1px solid #E8ECE6;">
+                                  <div style="min-width:70px;font-weight:700;color:#123D2A;font-size:0.82rem;">{step['day']}</div>
+                                  <div>
+                                    <div style="font-weight:700;color:#1B543A;font-size:0.88rem;">{step['stage']}</div>
+                                    <div style="font-size:0.84rem;color:#334155;line-height:1.5;">{step['action']}</div>
+                                  </div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+
+                        # WhatsApp Share Button
+                        location_name = st.session_state.get("location_name", "Agricultural Field")
+                        wa_url = build_whatsapp_share_url(
+                            crop=crop, disease=disease,
+                            confidence_pct=conf * 100,
+                            location_name=location_name,
+                            urgency=eco["urgency"] if HAS_ECONOMIC else "Review Required",
+                        )
+                        st.markdown(
+                            f"""
+                            <a href="{wa_url}" target="_blank"
+                               style="display:inline-flex;align-items:center;gap:0.5rem;background:#25D366;color:#FFFFFF;font-weight:700;font-size:0.9rem;padding:0.6rem 1.3rem;border-radius:8px;text-decoration:none;margin-top:0.7rem;">
+                                📲 Share Alert via WhatsApp
+                            </a>
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
     # --------------------------------------------------------------------------
     # TAB 2: CONTINUAL LEARNING & FIELD ADAPTATION STUDIO
@@ -1501,7 +1693,56 @@ elif st.session_state.screen == 2:
             c_idx += 1
 
     # --------------------------------------------------------------------------
-    # TAB 4: MODEL EVALUATION & ERROR ANALYSIS (FOR JUDGES)
+    # TAB 4: GRAD-CAM EXPLAINABILITY
+    # --------------------------------------------------------------------------
+    with tab_gradcam:
+        st.markdown(
+            """
+            <div class="crop-meta-box" style="border-left: 4px solid #7C3AED;">
+                <h4 style="color: #123D2A; margin-bottom: 0.3rem;">🔬 Grad-CAM Explainability — Neural Attention Heatmap</h4>
+                <p style="font-size: 0.88rem; color: #526E60; margin-bottom: 0.3rem;">
+                    Gradient-weighted Class Activation Mapping shows <strong>which leaf regions</strong> the AI used to make its diagnosis.
+                    Red/warm zones = high-attention lesion areas. Blue/cool zones = low influence.
+                    This transparency layer lets agronomists verify predictions are based on authentic pathology, not image artifacts.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.session_state.get("leaf_image") is not None and HAS_GRADCAM:
+            with st.spinner("⚡ Computing Grad-CAM neural attention heatmap..."):
+                cam_result = generate_gradcam(
+                    image=st.session_state.leaf_image,
+                    alpha=0.45,
+                )
+            if cam_result.get("overlay_image"):
+                gcam_c1, gcam_c2 = st.columns(2)
+                with gcam_c1:
+                    st.image(st.session_state.leaf_image, caption="📷 Original Leaf Photograph", use_container_width=True)
+                with gcam_c2:
+                    st.image(cam_result["overlay_image"], caption="🔥 Grad-CAM Heatmap Overlay", use_container_width=True)
+                # Save for report
+                st.session_state["cam_overlay"] = cam_result["overlay_image"]
+                st.markdown(
+                    f"""
+                    <div style="background:#F4F7F2;border-radius:10px;padding:0.9rem 1.2rem;margin-top:0.7rem;">
+                        <div style="font-weight:700;color:#123D2A;margin-bottom:0.3rem;">🧠 Neural Attention Analysis</div>
+                        <div style="font-size:0.88rem;color:#334D3F;">{cam_result.get('focus_description', 'Heatmap generated.')}</div>
+                        <div style="margin-top:0.5rem;font-size:0.8rem;color:#526E60;">
+                            Peak Activation Intensity: <strong>{cam_result.get('peak_intensity', 0):.2f}</strong>
+                            {'&nbsp;&nbsp;|&nbsp;&nbsp;<em>Note: Optical edge saliency fallback used — PyTorch model gradient hooks unavailable.</em>' if not cam_result.get('success') else ''}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        elif not HAS_GRADCAM:
+            st.warning("Grad-CAM module not available. Ensure `src/cropcare/explainability.py` is present.")
+        else:
+            st.info("Upload a leaf image in the **Diagnostic Leaf Screening** tab first, then return here to see the Grad-CAM explainability heatmap.")
+
+    # --------------------------------------------------------------------------
+    # TAB 5: MODEL EVALUATION & ERROR ANALYSIS (FOR JUDGES)
     # --------------------------------------------------------------------------
     with tab_evaluation:
         st.markdown(
@@ -1749,6 +1990,15 @@ elif st.session_state.screen == 3:
     )
 
     with st.form("climate_query_form"):
+        # Farmer-friendly location picker (if available)
+        if HAS_LOCATION and TOP_PRESET_LOCATIONS:
+            preset_options = ["— Select a farming region preset —"] + list(TOP_PRESET_LOCATIONS.keys())
+            chosen_preset = st.selectbox("📍 Quick Region Preset (or enter coordinates below)", preset_options, key="preset_loc")
+            if chosen_preset != "— Select a farming region preset —":
+                preset_lat, preset_lon = TOP_PRESET_LOCATIONS[chosen_preset]
+                st.session_state.climate_lat = preset_lat
+                st.session_state.climate_lon = preset_lon
+
         c_input1, c_input2, c_input3 = st.columns([1, 1, 1])
         with c_input1:
             lat = st.number_input(
@@ -1879,6 +2129,50 @@ elif st.session_state.screen == 3:
     else:
         st.info("Submit coordinates above to retrieve climate intelligence and anomaly calculations.")
 
+    # ==================================================================
+    # BIOMETEOROLOGICAL ALIGNMENT METER (Requires both leaf + climate data)
+    # ==================================================================
+    if HAS_ALIGNMENT and st.session_state.get("climate_result") and st.session_state.get("leaf_result"):
+        leaf_r = st.session_state.leaf_result
+        disease_al = leaf_r.get("disease", "")
+        align_res = compute_climate_alignment(
+            disease=disease_al,
+            climate_result=st.session_state.climate_result,
+        )
+        if align_res:
+            st.markdown("---")
+            st.markdown("#### 🧬 Biometeorological Disease Alignment Index")
+            al_c1, al_c2 = st.columns([1, 2])
+            with al_c1:
+                st.markdown(
+                    f"""
+                    <div style="background:#FFFFFF;border:1px solid #D6E0D9;border-radius:16px;padding:1.5rem;text-align:center;">
+                      <div style="font-size:0.8rem;font-weight:700;color:#526E60;text-transform:uppercase;">Alignment Index</div>
+                      <div style="font-family:'Space Grotesk',sans-serif;font-size:2.8rem;font-weight:800;color:{align_res['badge_color']};">{align_res['score']}<span style="font-size:1.2rem;color:#526E60;">/100</span></div>
+                      <div style="display:inline-block;background:{align_res['badge_color']}1A;color:{align_res['badge_color']};font-weight:700;font-size:0.85rem;padding:0.35rem 0.85rem;border-radius:20px;border:1px solid {align_res['badge_color']}33;margin-top:0.5rem;">{align_res['badge']}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with al_c2:
+                st.markdown(
+                    f"""
+                    <div style="background:#F4F7F2;border-radius:12px;padding:1rem 1.2rem;">
+                      <div style="font-weight:700;color:#123D2A;margin-bottom:0.4rem;">{align_res.get('category','')} — {align_res.get('pathogen','')}</div>
+                      <div style="font-size:0.88rem;color:#334D3F;line-height:1.55;">{align_res['explanation']}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if align_res.get("matched_factors"):
+                    with st.expander("📊 Epidemiological Factor Analysis", expanded=False):
+                        for f in align_res["matched_factors"]:
+                            st.markdown(f"• {f}")
+                if align_res.get("abiotic_stress_flag") and align_res.get("abiotic_mimic"):
+                    st.warning(f"⚠️ Abiotic Stress Mimic Detected: {align_res['abiotic_mimic']}")
+            # Store for report
+            st.session_state["alignment_result"] = align_res
+
     # Guided Screen 3 Navigation
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
     n_col1, n_col2 = st.columns([1, 1])
@@ -1969,13 +2263,23 @@ elif st.session_state.screen == 4:
                 st.success("Flagged: High Optical Confidence Diagnosis")
 
             # Multilingual Voice Advisory Player
-            audio_title_s4, audio_text_s4 = translate_advisory_text(
+            nurture_s4 = get_nurturing_recommendations(
                 crop=c_s4,
                 disease=d_s4,
-                severity_stage=sev_s4["stage_id"],
-                confidence=conf_s4,
+                severity_stage=sev_s4.get("stage_id", 1),
+            )
+            audio_text_s4 = translate_advisory_text(
+                crop=c_s4,
+                disease=d_s4,
+                stage_name=sev_s4["stage_name"],
+                damage_pct=sev_s4["damage_percentage"],
+                irrigation_action=nurture_s4["irrigation"]["action"],
+                nutrition_action=nurture_s4["nutrition"]["action"],
+                sanitation_action=nurture_s4["sanitation"]["action"],
+                bio_action=nurture_s4["bio_defense"]["action"],
                 lang=st.session_state.app_language,
             )
+            audio_title_s4 = f"CropCare Advisory — {c_s4} / {d_s4}"
             audio_html_s4 = generate_audio_speech_html(
                 title=audio_title_s4,
                 text_to_speak=audio_text_s4,
@@ -2023,6 +2327,31 @@ elif st.session_state.screen == 4:
             )
         else:
             st.info("No climate data was queried in this session.")
+
+    # ==================================================================
+    # FIELD HEALTH CARD DOWNLOAD (Full Agronomic Report)
+    # ==================================================================
+    if HAS_REPORT and st.session_state.get("leaf_result"):
+        st.markdown("---")
+        st.markdown("#### 📄 Download Full Field Diagnostic Report")
+        with st.spinner("Generating agronomic report..."):
+            report_html = generate_field_report_html(
+                leaf_result=st.session_state.get("leaf_result"),
+                climate_result=st.session_state.get("climate_result"),
+                alignment_result=st.session_state.get("alignment_result"),
+                advisory_result=None,
+                leaf_image=st.session_state.get("leaf_image"),
+                cam_image=st.session_state.get("cam_overlay"),
+                farmer_name="Lead Farmer",
+                farm_location=st.session_state.get("location_name", "Agricultural Field"),
+            )
+        st.download_button(
+            label="📥 Download Field Health Card (HTML/Print as PDF)",
+            data=report_html.encode("utf-8"),
+            file_name="CropCare_Field_Report.html",
+            mime="text/html",
+            use_container_width=True,
+        )
 
     # Global Agronomic Synthesis Advisory
     st.markdown(
