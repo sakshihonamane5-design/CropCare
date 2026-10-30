@@ -607,7 +607,13 @@ CROP_OPTIONS = [
 top_brand_col, top_lang_col = st.columns([3.2, 1.2])
 
 lang_keys = list(SUPPORTED_LANGUAGES.keys())
-lang_labels = [SUPPORTED_LANGUAGES[k]["label"] for k in lang_keys]
+lang_labels = [
+    SUPPORTED_LANGUAGES[k].get(
+        "label",
+        f"{SUPPORTED_LANGUAGES[k].get('flag', '')} {SUPPORTED_LANGUAGES[k].get('native', k)}"
+    )
+    for k in lang_keys
+]
 curr_lang_idx = lang_keys.index(st.session_state.app_language) if st.session_state.app_language in lang_keys else 0
 
 with top_brand_col:

@@ -17,6 +17,9 @@ class TestMultilingual(unittest.TestCase):
         self.assertIn("hi", SUPPORTED_LANGUAGES)
         self.assertIn("mr", SUPPORTED_LANGUAGES)
         self.assertEqual(SUPPORTED_LANGUAGES["hi"]["name"], "Hindi")
+        for code, meta in SUPPORTED_LANGUAGES.items():
+            self.assertIn("label", meta, f"Language '{code}' missing 'label' key")
+            self.assertIn("voice_code", meta, f"Language '{code}' missing 'voice_code' key")
 
     def test_translation_retrieval(self):
         self.assertIn("Read the leaf", t("hero_title", "en"))
@@ -63,3 +66,4 @@ class TestMultilingual(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

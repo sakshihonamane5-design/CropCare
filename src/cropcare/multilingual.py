@@ -11,12 +11,12 @@ from typing import Any, Dict, Optional
 
 # Supported application languages
 SUPPORTED_LANGUAGES = {
-    "en": {"name": "English", "native": "English", "flag": "🇬🇧", "voice_code": "en-US"},
-    "hi": {"name": "Hindi", "native": "हिन्दी", "flag": "🇮🇳", "voice_code": "hi-IN"},
-    "mr": {"name": "Marathi", "native": "मराठी", "flag": "🇮🇳", "voice_code": "mr-IN"},
-    "te": {"name": "Telugu", "native": "తెలుగు", "flag": "🇮🇳", "voice_code": "te-IN"},
-    "ta": {"name": "Tamil", "native": "தமிழ்", "flag": "🇮🇳", "voice_code": "ta-IN"},
-    "es": {"name": "Spanish", "native": "Español", "flag": "🇪🇸", "voice_code": "es-ES"},
+    "en": {"name": "English", "native": "English", "flag": "🇬🇧", "voice_code": "en-US", "label": "🇬🇧 English"},
+    "hi": {"name": "Hindi", "native": "हिन्दी", "flag": "🇮🇳", "voice_code": "hi-IN", "label": "🇮🇳 हिन्दी (Hindi)"},
+    "mr": {"name": "Marathi", "native": "मराठी", "flag": "🇮🇳", "voice_code": "mr-IN", "label": "🇮🇳 मराठी (Marathi)"},
+    "te": {"name": "Telugu", "native": "తెలుగు", "flag": "🇮🇳", "voice_code": "te-IN", "label": "🇮🇳 తెలుగు (Telugu)"},
+    "ta": {"name": "Tamil", "native": "தமிழ்", "flag": "🇮🇳", "voice_code": "ta-IN", "label": "🇮🇳 தமிழ் (Tamil)"},
+    "es": {"name": "Spanish", "native": "Español", "flag": "🇪🇸", "voice_code": "es-ES", "label": "🇪🇸 Español (Spanish)"},
 }
 
 # Core application UI vocabulary
@@ -267,3 +267,4 @@ def translate_advisory_text(
             f"Third, Sanitation: {sanitation_action}. "
             f"Fourth, Bio-Defense: {bio_action}."
         )
+
