@@ -41,6 +41,9 @@ from src.cropcare.multilingual import (
     generate_audio_speech_html,
     t,
     translate_advisory_text,
+    translate_crop_name,
+    translate_disease_name,
+    translate_diagnosis,
 )
 
 # New engines from image-engine branch
@@ -727,13 +730,15 @@ with top_lang_col:
         st.session_state.app_language = chosen_code
         st.rerun()
 
+lang = st.session_state.app_language
+
 # Interactive Top Navigation Buttons
 t_col1, t_col2, t_col3, t_col4 = st.columns(4)
 nav_items = [
-    (t_col1, 1, f"🏠 {t('step_1', st.session_state.app_language)}"),
-    (t_col2, 2, f"🍃 {t('step_2', st.session_state.app_language)}"),
-    (t_col3, 3, f"🌦️ {t('step_3', st.session_state.app_language)}"),
-    (t_col4, 4, f"📋 {t('step_4', st.session_state.app_language)}"),
+    (t_col1, 1, f"🏠 {t('step_1', lang)}"),
+    (t_col2, 2, f"🍃 {t('step_2', lang)}"),
+    (t_col3, 3, f"🌦️ {t('step_3', lang)}"),
+    (t_col4, 4, f"📋 {t('step_4', lang)}"),
 ]
 for col, s_num, s_title in nav_items:
     with col:
@@ -808,16 +813,16 @@ if st.session_state.screen == 1:
 
         c1, c2 = st.columns([1, 1.3])
         with c1:
-            if st.button(f"{t('start_screening', st.session_state.app_language)} →", type="primary", use_container_width=True):
+            if st.button(f"{t('start_screening', lang)} →", type="primary", use_container_width=True):
                 st.session_state.screen = 2
                 st.rerun()
         with c2:
-            if st.button(f"🧠 {t('continual_studio', st.session_state.app_language)} →", type="secondary", use_container_width=True):
+            if st.button(f"🧠 {t('continual_studio', lang)} →", type="secondary", use_container_width=True):
                 st.session_state.screen = 2
                 st.rerun()
 
         st.markdown("<div style='height: 0.3rem;'></div>", unsafe_allow_html=True)
-        if st.button("📊 Model Benchmark Metrics & Class Error Analysis (For Judges) →", type="secondary", use_container_width=True):
+        if st.button(t('judges_eval_btn', lang), type="secondary", use_container_width=True):
             st.session_state.screen = 2
             st.rerun()
 
@@ -831,12 +836,12 @@ if st.session_state.screen == 1:
                     <div class="farmer-img-frame">
                         <img src="{farmer_img_uri}" alt="Indian farmer inspecting crop leaves in a vibrant green agricultural field" class="farmer-hero-img" />
                         <div class="farmer-overlay-badge">
-                            <span>🌱 Field Intelligence Active</span>
+                            <span>🌱 {t('farmer_badge', lang)}</span>
                         </div>
                     </div>
                     <div class="farmer-card-caption">
-                        <div class="caption-title">Real-Time Agronomic Assessment</div>
-                        <div class="caption-sub">Field-tested intelligence connecting visual foliar symptoms with historical weather dynamics.</div>
+                        <div class="caption-title">{t('caption_title', lang)}</div>
+                        <div class="caption-sub">{t('caption_sub', lang)}</div>
                     </div>
                 </div>
                 """,
@@ -852,13 +857,12 @@ if st.session_state.screen == 1:
 
     with f_col1:
         st.markdown(
-            """
+            f"""
             <div class="feature-card">
                 <div class="feature-icon">🍃</div>
-                <div class="feature-title">Targeted Crop Screening</div>
+                <div class="feature-title">{t('feat1_title', lang)}</div>
                 <div class="feature-body">
-                    Select your crop species (Tomato, Potato, Corn, Apple, etc.) to isolate known pathologies,
-                    eliminating cross-species confusion and delivering maximum real-time confidence.
+                    {t('feat1_desc', lang)}
                 </div>
             </div>
             """,
@@ -867,13 +871,12 @@ if st.session_state.screen == 1:
 
     with f_col2:
         st.markdown(
-            """
+            f"""
             <div class="feature-card">
                 <div class="feature-icon">🧠</div>
-                <div class="feature-title">Continual Learning Studio</div>
+                <div class="feature-title">{t('feat2_title', lang)}</div>
                 <div class="feature-body">
-                    Encountered an unmonitored crop (e.g. Rice, Wheat, Cotton)? Upload reference photos in 
-                    the Continual Learning tab to train the dynamic 1024-dim neural feature bank in real time!
+                    {t('feat2_desc', lang)}
                 </div>
             </div>
             """,
@@ -882,13 +885,12 @@ if st.session_state.screen == 1:
 
     with f_col3:
         st.markdown(
-            """
+            f"""
             <div class="feature-card">
                 <div class="feature-icon">🛡️</div>
-                <div class="feature-title">Agronomic Safeguards</div>
+                <div class="feature-title">{t('feat3_title', lang)}</div>
                 <div class="feature-body">
-                    Strict boundary between statistical model certainty and confirmed biology. Always 
-                    advocates field verification before chemical intervention.
+                    {t('feat3_desc', lang)}
                 </div>
             </div>
             """,
@@ -901,12 +903,11 @@ if st.session_state.screen == 1:
 # ==============================================================================
 elif st.session_state.screen == 2:
     st.markdown(
-        """
+        f"""
         <div class="surface-card">
-            <h3>🍃 Step 2: Optical Leaf Health Screening & Continual Learning</h3>
+            <h3>{t('screen2_title', lang)}</h3>
             <p class="card-desc">
-                Screen crop leaves across 14 supported species or register new reference observations into the 
-                active learning memory bank to teach the system new crops and pathologies in real time.
+                {t('screen2_desc', lang)}
             </p>
         </div>
         """,
@@ -914,11 +915,11 @@ elif st.session_state.screen == 2:
     )
 
     tab_screening, tab_studio, tab_library, tab_gradcam, tab_evaluation = st.tabs([
-        "🍃 1. Diagnostic Leaf Screening",
-        "🧠 2. Continual Learning Studio (Upload & Teach Model)",
-        "📚 3. Monitored Crops Library (14 Species, 38 Pathologies)",
-        "🔬 4. Grad-CAM Explainability (AI Vision)",
-        "📊 5. Model Evaluation & Error Analysis (For Judges)",
+        t('tab_screening', lang),
+        t('tab_studio', lang),
+        t('tab_library', lang),
+        t('tab_gradcam', lang),
+        t('tab_evaluation', lang),
     ])
 
     # --------------------------------------------------------------------------
@@ -943,7 +944,7 @@ elif st.session_state.screen == 2:
                 break
 
         selected_label = st.selectbox(
-            "Choose Crop Type to isolate diagnosis (or keep Auto-Detect):",
+            t("target_crop", lang),
             options=crop_labels,
             index=curr_idx,
             help="Targeting your crop eliminates 28+ irrelevant pathologies from the neural softmax, boosting precision and confidence.",
@@ -1036,7 +1037,7 @@ elif st.session_state.screen == 2:
         leaf_col_left, leaf_col_right = st.columns([1, 1], gap="large")
 
         with leaf_col_left:
-            st.markdown(f"#### 📷 {t('upload_photo', st.session_state.app_language)}")
+            st.markdown(f"#### 📷 {t('upload_photo', lang)}")
 
             input_mode = st.radio(
                 "Acquisition Method:",
@@ -1050,7 +1051,7 @@ elif st.session_state.screen == 2:
 
             if input_mode == "📁 Upload Image":
                 active_file = st.file_uploader(
-                    "Upload leaf image (JPG, JPEG, PNG)",
+                    t('upload_file_label', lang),
                     type=["jpg", "jpeg", "png"],
                     key="screening_uploader",
                     help="High-contrast, focused imagery centered on a single leaf produces the most reliable screening.",
@@ -1059,7 +1060,7 @@ elif st.session_state.screen == 2:
                     new_source_id = f"upload_{active_file.name}_{active_file.size}"
             else:
                 active_file = st.camera_input(
-                    "Capture live leaf photograph",
+                    t('camera_input_label', lang),
                     key="leaf_camera_input",
                     help="Center the plant leaf with uniform lighting and click Take Photo.",
                 )
@@ -1088,7 +1089,7 @@ elif st.session_state.screen == 2:
 
             # Run Screening Action
             if st.session_state.leaf_image is not None:
-                run_btn_label = f"Run {chosen_crop_key.replace('_', ' ')} Screening ⚡" if chosen_crop_key != "All Crops (Auto-Detect)" else "Run Multi-Crop Screening ⚡"
+                run_btn_label = f"⚡ {t('btn_submit_screening', lang)}"
                 if st.button(run_btn_label, type="primary", use_container_width=True):
                     with st.spinner("Executing neural inference via MobileNetV3..."):
                         try:
@@ -1140,16 +1141,19 @@ elif st.session_state.screen == 2:
                 else:
                     crop = res.get("crop", "Unknown")
                     disease = res.get("disease", "Unknown")
+                    display_crop = translate_crop_name(crop, lang)
+                    display_disease = translate_disease_name(disease, lang)
                     conf = res.get("confidence", 0.0)
                     uncertain = res.get("uncertain", False)
                     crop_filtered = res.get("crop_filter_applied", False)
 
                     if crop_filtered:
-                        mode_badge = f"""<span class="crop-badge-pill" style="margin-bottom: 0.6rem;">🎯 Targeted Crop Mode: {crop}</span>"""
+                        mode_badge = f"""<span class="crop-badge-pill" style="margin-bottom: 0.6rem;">🎯 {t('screening_mode', lang)}: {display_crop}</span>"""
                     else:
                         det_crop = res.get("detected_crop", crop)
+                        det_crop_trans = translate_crop_name(det_crop, lang)
                         det_conf = res.get("detected_crop_confidence", 0.0) * 100
-                        mode_badge = f"""<span class="crop-badge-pill" style="background: #E8ECE6; color: #1B543A; margin-bottom: 0.6rem;">🔍 Auto-Detected: {det_crop} ({det_conf:.1f}% crop certainty)</span>"""
+                        mode_badge = f"""<span class="crop-badge-pill" style="background: #E8ECE6; color: #1B543A; margin-bottom: 0.6rem;">🔍 {det_crop_trans} ({det_conf:.1f}%)</span>"""
 
                     st.markdown(
                         f"""
@@ -1157,16 +1161,16 @@ elif st.session_state.screen == 2:
                             {mode_badge}
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; margin-top: 0.4rem;">
                                 <div>
-                                    <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #526E60; letter-spacing: 0.05em;">Crop Species</div>
-                                    <div style="font-family: 'Space Grotesk', sans-serif; font-size: 1.6rem; font-weight: 700; color: #123D2A;">{crop}</div>
+                                    <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #526E60; letter-spacing: 0.05em;">{t('crop_identified', lang)}</div>
+                                    <div style="font-family: 'Space Grotesk', sans-serif; font-size: 1.6rem; font-weight: 700; color: #123D2A;">{display_crop}</div>
                                 </div>
                                 <div style="text-align: right;">
-                                    <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #526E60; letter-spacing: 0.05em;">Confidence</div>
+                                    <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #526E60; letter-spacing: 0.05em;">{t('confidence_score', lang)}</div>
                                     <div style="font-family: 'Space Grotesk', sans-serif; font-size: 1.6rem; font-weight: 700; color: #123D2A;">{conf*100:.1f}%</div>
                                 </div>
                             </div>
-                            <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #526E60; letter-spacing: 0.05em;">Screened Condition</div>
-                            <div style="font-size: 1.25rem; font-weight: 600; color: #1B543A; margin-bottom: 0.8rem;">{disease}</div>
+                            <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #526E60; letter-spacing: 0.05em;">{t('visual_condition', lang)}</div>
+                            <div style="font-size: 1.25rem; font-weight: 600; color: #1B543A; margin-bottom: 0.8rem;">{display_disease}</div>
                             <div style="font-size: 0.75rem; color: #526E60;">Model: <code>{res.get('model_name', 'MobileNetV3-Small-PlantVillage')}</code> | TTA: <strong>{'Enabled' if st.session_state.use_tta_boost else 'Disabled'}</strong></div>
                         </div>
                         """,
@@ -1242,7 +1246,7 @@ elif st.session_state.screen == 2:
                         confidence=conf,
                     )
                     st.markdown("---")
-                    st.markdown("#### 🔬 Pathological Severity & Foliar Progression Stage")
+                    st.markdown(f"#### {t('severity_title', lang)}")
 
                     sev_colors = sev["color_theme"]
                     st.markdown(
@@ -1253,7 +1257,7 @@ elif st.session_state.screen == 2:
                                     {sev['severity_level']}
                                 </span>
                                 <span style="font-size: 0.84rem; font-weight: 700; color: #526E60;">
-                                    Foliar Damage: <strong>{sev['damage_percentage']:.1f}% Canopy Affected</strong>
+                                    {t('foliar_damage', lang)}: <strong>{sev['damage_percentage']:.1f}% Canopy Affected</strong>
                                 </span>
                             </div>
                             <div style="font-family: 'Space Grotesk', sans-serif; font-size: 1.3rem; font-weight: 800; color: #123D2A; margin-bottom: 0.4rem;">
@@ -1266,8 +1270,8 @@ elif st.session_state.screen == 2:
                                 <strong>Physiological State:</strong> {sev['pathological_state']}
                             </div>
                             <div style="display: flex; justify-content: space-between; font-size: 0.78rem; font-weight: 600; color: #526E60; border-top: 1px solid #E8ECE6; padding-top: 0.5rem;">
-                                <span>⏱️ <strong>Urgency:</strong> {sev['urgency']}</span>
-                                <span>📈 <strong>Prognosis:</strong> {sev['prognosis'][:50]}...</span>
+                                <span>⏱️ <strong>{t('urgency_label', lang)}:</strong> {sev['urgency']}</span>
+                                <span>📈 <strong>{t('prognosis_label', lang)}:</strong> {sev['prognosis'][:50]}...</span>
                             </div>
                         </div>
                         """,
@@ -1282,14 +1286,14 @@ elif st.session_state.screen == 2:
                         disease=disease,
                         severity_stage=sev["stage_id"],
                     )
-                    st.markdown("#### 🌾 Farmer Nurturing Protocol: Actionable Crop Care Changes")
-                    st.caption(f"Science-backed adjustments to irrigation, soil nutrition, and canopy care to eliminate {disease}:")
+                    st.markdown(f"#### {t('nurturing_title', lang)}")
+                    st.caption(f"Science-backed adjustments to irrigation, soil nutrition, and canopy care to eliminate {display_disease}:")
 
                     n_tab1, n_tab2, n_tab3, n_tab4 = st.tabs([
-                        "💧 1. Irrigation Regimen",
-                        "🧪 2. Soil & Nutrients (NPK)",
-                        "✂️ 3. Canopy & Sanitation",
-                        "🛡️ 4. Bio-Defense Shield",
+                        t('tab_irrigation', lang),
+                        t('tab_nutrition', lang),
+                        t('tab_sanitation', lang),
+                        t('tab_bio_defense', lang),
                     ])
 
                     with n_tab1:
@@ -1506,7 +1510,7 @@ elif st.session_state.screen == 2:
                                 unsafe_allow_html=True,
                             )
 
-                        # WhatsApp Share Button
+                        # Kisan Emergency Dispatch: WhatsApp & SMS Alerts
                         location_name = st.session_state.get("location_name", "Agricultural Field")
                         wa_url = build_whatsapp_share_url(
                             crop=crop, disease=disease,
@@ -1514,15 +1518,58 @@ elif st.session_state.screen == 2:
                             location_name=location_name,
                             urgency=eco["urgency"] if HAS_ECONOMIC else "Review Required",
                         )
-                        st.markdown(
-                            f"""
-                            <a href="{wa_url}" target="_blank"
-                               style="display:inline-flex;align-items:center;gap:0.5rem;background:#25D366;color:#FFFFFF;font-weight:700;font-size:0.9rem;padding:0.6rem 1.3rem;border-radius:8px;text-decoration:none;margin-top:0.7rem;">
-                                📲 Share Alert via WhatsApp
-                            </a>
-                            """,
-                            unsafe_allow_html=True,
-                        )
+                        st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
+                        disp_c1, disp_c2 = st.columns(2)
+                        with disp_c1:
+                            st.markdown(
+                                f"""
+                                <a href="{wa_url}" target="_blank"
+                                   style="display:flex;align-items:center;justify-content:center;gap:0.5rem;background:#25D366;color:#FFFFFF;font-weight:700;font-size:0.88rem;padding:0.65rem 1rem;border-radius:10px;text-decoration:none;box-shadow:0 3px 10px rgba(37,211,102,0.25);">
+                                    📲 {t('whatsapp_btn', lang)}
+                                </a>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+                        with disp_c2:
+                            import urllib.parse
+                            sms_content = urllib.parse.quote(
+                                f"CropCare Farmer Alert: {display_crop} showing symptoms of {display_disease} ({conf*100:.0f}% confidence). Farm Location: {location_name}. Please advise on treatment."
+                            )
+                            st.markdown(
+                                f"""
+                                <a href="sms:?body={sms_content}"
+                                   style="display:flex;align-items:center;justify-content:center;gap:0.5rem;background:#0284C7;color:#FFFFFF;font-weight:700;font-size:0.88rem;padding:0.65rem 1rem;border-radius:10px;text-decoration:none;box-shadow:0 3px 10px rgba(2,132,199,0.25);">
+                                    📱 Dispatch Kisan SMS Alert to Extension Officer
+                                </a>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+
+                        # Multimodal Gemini Vision Second Opinion
+                        st.markdown("---")
+                        st.markdown("#### 🤖 Gemini Multimodal Vision Second Opinion")
+                        st.caption("Request independent multimodal visual verification from Google Gemini to verify symptoms and cross-check CNN predictions.")
+                        if st.button("🔍 Request Independent Gemini AI Vision Verification", type="secondary", use_container_width=True, key="btn_gemini_vision"):
+                            from src.cropcare.chat_engine import verify_leaf_with_gemini_vision
+                            with st.spinner("Consulting Gemini Multimodal Vision..."):
+                                gemini_vis = verify_leaf_with_gemini_vision(
+                                    image=st.session_state.leaf_image,
+                                    predicted_crop=crop,
+                                    predicted_disease=disease,
+                                )
+                                st.session_state["gemini_vision_res"] = gemini_vis
+
+                        if st.session_state.get("gemini_vision_res"):
+                            vis_info = st.session_state["gemini_vision_res"]
+                            st.markdown(
+                                f"""
+                                <div style="background:#F0F9FF;border:1.5px solid #BAE6FD;border-radius:12px;padding:1.1rem;margin-top:0.6rem;">
+                                    <div style="font-weight:700;color:#0369A1;margin-bottom:0.4rem;font-size:0.95rem;">🤖 Clinical Multimodal AI Verification (Gemini 2.5 Flash)</div>
+                                    <div style="font-size:0.9rem;color:#0C4A6E;line-height:1.6;">{vis_info.get('analysis', '')}</div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
 
     # --------------------------------------------------------------------------
     # TAB 2: CONTINUAL LEARNING & FIELD ADAPTATION STUDIO
@@ -1963,11 +2010,11 @@ elif st.session_state.screen == 2:
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
     n_col1, n_col2 = st.columns([1, 1])
     with n_col1:
-        if st.button("← Back to Welcome", type="secondary"):
+        if st.button(t('btn_back_welcome', lang), type="secondary"):
             st.session_state.screen = 1
             st.rerun()
     with n_col2:
-        if st.button("Continue to Climate Insights →", type="primary"):
+        if st.button(t('btn_goto_climate', lang), type="primary"):
             st.session_state.screen = 3
             st.rerun()
 
@@ -1977,12 +2024,11 @@ elif st.session_state.screen == 2:
 # ==============================================================================
 elif st.session_state.screen == 3:
     st.markdown(
-        """
+        f"""
         <div class="surface-card">
-            <h3>🌦️ Step 3: Hyper-Local Environmental Analytics</h3>
+            <h3>{t('screen3_title', lang)}</h3>
             <p class="card-desc">
-                Retrieve historical climate observations and multi-year anomaly baselines via Open-Meteo.
-                Environmental stress (heat, moisture deficit, humidity) often predisposes crops to pathogen vulnerability.
+                {t('screen3_desc', lang)}
             </p>
         </div>
         """,
@@ -1993,7 +2039,7 @@ elif st.session_state.screen == 3:
         # Farmer-friendly location picker (if available)
         if HAS_LOCATION and TOP_PRESET_LOCATIONS:
             preset_options = ["— Select a farming region preset —"] + list(TOP_PRESET_LOCATIONS.keys())
-            chosen_preset = st.selectbox("📍 Quick Region Preset (or enter coordinates below)", preset_options, key="preset_loc")
+            chosen_preset = st.selectbox(t('preset_loc_label', lang), preset_options, key="preset_loc")
             if chosen_preset != "— Select a farming region preset —":
                 preset_lat, preset_lon = TOP_PRESET_LOCATIONS[chosen_preset]
                 st.session_state.climate_lat = preset_lat
@@ -2002,7 +2048,7 @@ elif st.session_state.screen == 3:
         c_input1, c_input2, c_input3 = st.columns([1, 1, 1])
         with c_input1:
             lat = st.number_input(
-                "Latitude (°N)",
+                t('lat_label', lang),
                 min_value=-90.0,
                 max_value=90.0,
                 value=float(st.session_state.climate_lat),
@@ -2011,7 +2057,7 @@ elif st.session_state.screen == 3:
             )
         with c_input2:
             lon = st.number_input(
-                "Longitude (°E)",
+                t('lon_label', lang),
                 min_value=-180.0,
                 max_value=180.0,
                 value=float(st.session_state.climate_lon),
@@ -2020,14 +2066,14 @@ elif st.session_state.screen == 3:
             )
         with c_input3:
             window = st.selectbox(
-                "Historical Weather Window",
+                t('history_window_label', lang),
                 options=[7, 14, 30],
                 index=[7, 14, 30].index(st.session_state.climate_days)
                 if st.session_state.climate_days in [7, 14, 30]
                 else 2,
             )
 
-        submit_weather = st.form_submit_button("Fetch Climate Insights ⚡", use_container_width=True)
+        submit_weather = st.form_submit_button(t('btn_fetch_climate', lang), use_container_width=True)
 
     if submit_weather:
         st.session_state.climate_lat = lat
@@ -2057,7 +2103,7 @@ elif st.session_state.screen == 3:
 
         # Metrics Row
         recent = env.get("recent") or {}
-        st.markdown(f"#### Recent Summary ({st.session_state.climate_days} Days)")
+        st.markdown(f"#### {t('recent_summary', lang)} ({st.session_state.climate_days} Days)")
 
         m1, m2, m3, m4, m5 = st.columns(5)
         with m1:
@@ -2072,7 +2118,7 @@ elif st.session_state.screen == 3:
             st.metric("Ref ET0", format_metric(recent.get("et0_mm"), "mm"))
 
         # Anomalies
-        st.markdown("#### Climate Anomalies vs Historical Baseline")
+        st.markdown(f"#### {t('anomalies_title', lang)}")
         st.caption(
             "Anomalies indicate how recent weather compares to historical averages for this "
             "time of year. They describe environmental conditions, not disease evidence."
@@ -2141,7 +2187,7 @@ elif st.session_state.screen == 3:
         )
         if align_res:
             st.markdown("---")
-            st.markdown("#### 🧬 Biometeorological Disease Alignment Index")
+            st.markdown(f"#### {t('alignment_title', lang)}")
             al_c1, al_c2 = st.columns([1, 2])
             with al_c1:
                 st.markdown(
@@ -2177,11 +2223,11 @@ elif st.session_state.screen == 3:
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
     n_col1, n_col2 = st.columns([1, 1])
     with n_col1:
-        if st.button("← Back to Leaf Screening", type="secondary"):
+        if st.button(t('btn_back_leaf', lang), type="secondary"):
             st.session_state.screen = 2
             st.rerun()
     with n_col2:
-        if st.button("Proceed to Executive Summary →", type="primary"):
+        if st.button(t('btn_goto_summary', lang), type="primary"):
             st.session_state.screen = 4
             st.rerun()
 
@@ -2191,11 +2237,11 @@ elif st.session_state.screen == 3:
 # ==============================================================================
 elif st.session_state.screen == 4:
     st.markdown(
-        """
+        f"""
         <div class="surface-card">
-            <h3>📋 Step 4: Executive Agronomic Summary</h3>
+            <h3>{t('screen4_title', lang)}</h3>
             <p class="card-desc">
-                Synthesized briefing consolidating optical leaf screening and hyper-local environmental data.
+                {t('screen4_desc', lang)}
             </p>
         </div>
         """,
@@ -2206,12 +2252,14 @@ elif st.session_state.screen == 4:
 
     # Column 1: Leaf Screening Audit
     with sum_col1:
-        st.markdown("#### 🍃 Optical Screening Record")
+        st.markdown(f"#### {t('screening_record', lang)}")
         leaf_res = st.session_state.leaf_result
 
         if leaf_res and leaf_res.get("predicted_class"):
-            crop = leaf_res.get("crop", "Unknown")
-            disease = leaf_res.get("disease", "Unknown")
+            raw_crop = leaf_res.get("crop", "Unknown")
+            raw_disease = leaf_res.get("disease", "Unknown")
+            crop = translate_crop_name(raw_crop, lang)
+            disease = translate_disease_name(raw_disease, lang)
             conf = leaf_res.get("confidence", 0.0)
             uncert = leaf_res.get("uncertain", False)
             crop_filtered = leaf_res.get("crop_filter_applied", False)
@@ -2221,13 +2269,13 @@ elif st.session_state.screen == 4:
             st.markdown(
                 f"""
                 <div class="diagnostic-panel">
-                    <div style="font-size: 0.75rem; font-weight: 700; color: #526E60; text-transform: uppercase;">Screening Mode</div>
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #526E60; text-transform: uppercase;">{t('screening_mode', lang)}</div>
                     <div style="font-size: 0.95rem; font-weight: 700; color: #1B543A; margin-bottom: 0.6rem;">{mode_label}</div>
-                    <div style="font-size: 0.75rem; font-weight: 700; color: #526E60; text-transform: uppercase;">Crop Identified</div>
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #526E60; text-transform: uppercase;">{t('crop_identified', lang)}</div>
                     <div style="font-size: 1.35rem; font-weight: 700; color: #123D2A; margin-bottom: 0.6rem;">{crop}</div>
-                    <div style="font-size: 0.75rem; font-weight: 700; color: #526E60; text-transform: uppercase;">Visual Condition</div>
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #526E60; text-transform: uppercase;">{t('visual_condition', lang)}</div>
                     <div style="font-size: 1.15rem; font-weight: 600; color: #1B543A; margin-bottom: 0.6rem;">{disease}</div>
-                    <div style="font-size: 0.75rem; font-weight: 700; color: #526E60; text-transform: uppercase;">Confidence Score</div>
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #526E60; text-transform: uppercase;">{t('confidence_score', lang)}</div>
                     <div style="font-size: 1.25rem; font-weight: 700; color: #123D2A;">{conf*100:.1f}%</div>
                 </div>
                 """,
@@ -2240,7 +2288,7 @@ elif st.session_state.screen == 4:
 
             sev_s4 = classify_disease_severity(
                 st.session_state.leaf_image,
-                disease_name=disease,
+                disease_name=raw_disease,
                 confidence=conf,
             )
             st.markdown(
@@ -2264,35 +2312,35 @@ elif st.session_state.screen == 4:
 
             # Multilingual Voice Advisory Player
             nurture_s4 = get_nurturing_recommendations(
-                crop=c_s4,
-                disease=d_s4,
+                crop=raw_crop,
+                disease=raw_disease,
                 severity_stage=sev_s4.get("stage_id", 1),
             )
             audio_text_s4 = translate_advisory_text(
-                crop=c_s4,
-                disease=d_s4,
+                crop=crop,
+                disease=disease,
                 stage_name=sev_s4["stage_name"],
                 damage_pct=sev_s4["damage_percentage"],
                 irrigation_action=nurture_s4["irrigation"]["action"],
                 nutrition_action=nurture_s4["nutrition"]["action"],
                 sanitation_action=nurture_s4["sanitation"]["action"],
                 bio_action=nurture_s4["bio_defense"]["action"],
-                lang=st.session_state.app_language,
+                lang=lang,
             )
-            audio_title_s4 = f"CropCare Advisory — {c_s4} / {d_s4}"
+            audio_title_s4 = f"CropCare Advisory — {crop} / {disease}"
             audio_html_s4 = generate_audio_speech_html(
                 title=audio_title_s4,
                 text_to_speak=audio_text_s4,
-                lang=st.session_state.app_language,
+                lang=lang,
             )
-            st.markdown(f"##### 🎙️ {t('audio_listen_btn', st.session_state.app_language)}")
+            st.markdown(f"##### 🎙️ {t('audio_listen_btn', lang)}")
             components.html(audio_html_s4, height=130)
         else:
             st.info("No leaf screening was completed in this session.")
 
     # Column 2: Climate Context Audit
     with sum_col2:
-        st.markdown("#### 🌦️ Environmental Context Record")
+        st.markdown(f"#### {t('climate_record', lang)}")
         clim_res = st.session_state.climate_result
 
         if clim_res and clim_res.get("recent"):
@@ -2333,7 +2381,7 @@ elif st.session_state.screen == 4:
     # ==================================================================
     if HAS_REPORT and st.session_state.get("leaf_result"):
         st.markdown("---")
-        st.markdown("#### 📄 Download Full Field Diagnostic Report")
+        st.markdown(f"#### {t('download_report_btn', lang)}")
         with st.spinner("Generating agronomic report..."):
             report_html = generate_field_report_html(
                 leaf_result=st.session_state.get("leaf_result"),
@@ -2346,7 +2394,7 @@ elif st.session_state.screen == 4:
                 farm_location=st.session_state.get("location_name", "Agricultural Field"),
             )
         st.download_button(
-            label="📥 Download Field Health Card (HTML/Print as PDF)",
+            label=t('download_report_btn', lang),
             data=report_html.encode("utf-8"),
             file_name="CropCare_Field_Report.html",
             mime="text/html",
@@ -2369,11 +2417,11 @@ elif st.session_state.screen == 4:
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
     n_col1, n_col2 = st.columns([1, 1])
     with n_col1:
-        if st.button("← Back to Climate Insights", type="secondary"):
+        if st.button(t('btn_back_climate', lang), type="secondary"):
             st.session_state.screen = 3
             st.rerun()
     with n_col2:
-        if st.button("🔄 Start New Screening Session", type="primary"):
+        if st.button(t('btn_restart', lang), type="primary"):
             st.session_state.screen = 1
             st.session_state.leaf_image = None
             st.session_state.leaf_image_id = None
@@ -2388,8 +2436,9 @@ elif st.session_state.screen == 4:
 # ==============================================================================
 def render_cropcare_chatbot() -> None:
     """Render the floating Gemini AI Assistant launcher and interactive panel."""
+    chat_lang = st.session_state.app_language
     # Floating Launcher Button in Bottom-Right
-    launcher_label = "💬 CropCare AI" if not st.session_state.chat_open else "✕ Close Assistant"
+    launcher_label = f"💬 {t('chat_btn_open', chat_lang)}" if not st.session_state.chat_open else f"✕ {t('chat_btn_close', chat_lang)}"
     if st.button(
         launcher_label,
         key="chat_launcher_btn",
@@ -2404,7 +2453,7 @@ def render_cropcare_chatbot() -> None:
             head_col1, head_col2, head_col3 = st.columns([3, 0.8, 0.8])
             with head_col1:
                 st.markdown(
-                    "<div style='font-family: \"Space Grotesk\", sans-serif; font-size: 1.15rem; font-weight: 700; color: #123D2A;'>🌱 CropCare Assistant</div>",
+                    f"<div style='font-family: \"Space Grotesk\", sans-serif; font-size: 1.15rem; font-weight: 700; color: #123D2A;'>{t('chat_panel_title', chat_lang)}</div>",
                     unsafe_allow_html=True,
                 )
             with head_col2:
@@ -2417,6 +2466,17 @@ def render_cropcare_chatbot() -> None:
                     st.rerun()
 
             st.caption("Agronomic Guidance • Powered by Google Gemini")
+
+            # Inline Gemini API Key Setup (if not already set in environment or secrets)
+            from src.cropcare.chat_engine import get_gemini_api_key
+            curr_gemini_key = get_gemini_api_key()
+            if not curr_gemini_key:
+                with st.expander("🔑 Configure Gemini API Key", expanded=False):
+                    entered_key = st.text_input("Enter Google Gemini API Key:", type="password", key="user_gemini_api_key_input")
+                    if entered_key and st.button("Save Key", key="save_gemini_key_btn"):
+                        os.environ["GEMINI_API_KEY"] = entered_key.strip()
+                        st.success("API Key configured for this session!")
+                        st.rerun()
 
             # Suggested Prompts (shown when conversation is new)
             if len(st.session_state.chat_messages) <= 1:
@@ -2453,7 +2513,7 @@ def render_cropcare_chatbot() -> None:
                             st.markdown(turn.get("content", ""))
 
             # Input Prompt
-            prompt_text = st.chat_input("Ask about crops, disease, or weather...", key="chat_user_prompt")
+            prompt_text = st.chat_input(t('chat_placeholder', chat_lang), key="chat_user_prompt")
             if prompt_text:
                 _submit_chat_message(prompt_text)
                 st.rerun()
