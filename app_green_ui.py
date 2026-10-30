@@ -62,8 +62,26 @@ try:
     HAS_ADVISORY = True
 except Exception:
     HAS_ADVISORY = False
-    get_weather_smart_ipm = None
-    generate_recovery_roadmap = None
+
+    def get_weather_smart_ipm(*args, **kwargs):
+        return {
+            "status": "READY",
+            "cultural": ["Ensure good aeration and crop sanitation."],
+            "biological": ["Apply preventive bio-shield if needed."],
+            "chemical": ["Consult local agricultural officer before spraying."],
+            "spray_window": {
+                "status": "OPTIMAL",
+                "badge": "🟡 Check Local Conditions",
+                "advice": "Verify local weather prior to foliar spray.",
+            },
+        }
+
+    def generate_recovery_roadmap(*args, **kwargs):
+        return [
+            {"day": "Day 1-2", "stage": "Sanitation", "action": "Prune infected lower foliage."},
+            {"day": "Day 3-5", "stage": "Targeted Treatment", "action": "Apply recommended preventive treatment."},
+            {"day": "Day 7", "stage": "Monitoring", "action": "Re-screen crop with CropCare."},
+        ]
 
     def build_whatsapp_share_url(crop: str, disease: str, confidence_pct: float, location_name: str, urgency: str) -> str:
         import urllib.parse
@@ -1506,6 +1524,7 @@ elif st.session_state.screen == 2:
                         st.markdown("---")
                         st.markdown("#### 🌿 Weather-Smart IPM Advisory")
                         ipm = get_weather_smart_ipm(
+                            leaf_result=st.session_state.get("leaf_result"),
                             disease=disease,
                             climate_result=st.session_state.get("climate_result"),
                         )
