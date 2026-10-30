@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 # Default model artifacts
 DEFAULT_MODEL_PATH = "models/plantvillage_mobilenetv3.pth"
 DEFAULT_CLASS_MAPPING_PATH = "models/class_mapping.json"
-DEFAULT_CONFIDENCE_THRESHOLD = 0.55  # Below this threshold, mark prediction as uncertain
+DEFAULT_CONFIDENCE_THRESHOLD = 0.50  # Calibrated threshold for uncertainty flagging
 MIN_IMAGE_DIMENSION = 32
 BLANK_IMAGE_STD_THRESHOLD = 5.0
 
@@ -119,6 +119,8 @@ def _get_empty_prediction_schema(
         "disease": None,
         "confidence": 0.0,
         "probabilities": {},
+        "top_candidates": [],
+        "crop_constrained": False,
         "uncertain": True,
         "model_name": model_name,
         "warnings": warnings,
@@ -571,9 +573,70 @@ def predict_image(
             raw_c = cls_name.split("___")[0]
             crop_aggregates[raw_c] += p
 
-        top_idx = int(np.argmax(probs))
-        top_class = classes[top_idx]
-        top_confidence = float(probs[top_idx])
+        # Check for crop constraint filter
+        active_crop_filter = crop_filter.strip() if (crop_filter and str(crop_filter).strip()) else None
+        if active_crop_filter and active_crop_filter.lower() in ("auto-detect", "auto-detect (all crops)", "all", "none"):
+            active_crop_filter = None
+
+        if active_crop_filter:
+            # Match classes belonging to requested crop
+            c_lower = active_crop_filter.lower()
+            matching_indices = [
+                i for i, c in enumerate(classes)
+                if c_lower in c.lower() or c_lower in class_details.get(c, {}).get("crop", "").lower()
+            ]
+
+            if matching_indices:
+                subset_sum = sum(float(probs[i]) for i in matching_indices)
+                top_idx = max(matching_indices, key=lambda i: probs[i])
+                top_class = classes[top_idx]
+                top_confidence = (float(probs[top_idx]) / subset_sum) if subset_sum > 0 else float(probs[top_idx])
+
+                result["crop_constrained"] = True
+
+                # Top candidates within filtered crop
+                sorted_crop_indices = sorted(matching_indices, key=lambda i: probs[i], reverse=True)[:3]
+                top_candidates = []
+                for i in sorted_crop_indices:
+                    cls_k = classes[i]
+                    c_prob = (float(probs[i]) / subset_sum) if subset_sum > 0 else float(probs[i])
+                    d_name = class_details.get(cls_k, {}).get("disease") or cls_k.split("___")[-1].replace("_", " ")
+                    top_candidates.append({
+                        "class": cls_k,
+                        "crop": class_details.get(cls_k, {}).get("crop") or cls_k.split("___")[0].replace("_", " "),
+                        "disease": d_name,
+                        "confidence": round(c_prob, 4),
+                    })
+                result["top_candidates"] = top_candidates
+            else:
+                # Fallback to unconstrained
+                top_idx = int(np.argmax(probs))
+                top_class = classes[top_idx]
+                top_confidence = float(probs[top_idx])
+                sorted_indices = np.argsort(probs)[::-1][:3]
+                result["top_candidates"] = [
+                    {
+                        "class": classes[i],
+                        "crop": class_details.get(classes[i], {}).get("crop") or classes[i].split("___")[0].replace("_", " "),
+                        "disease": class_details.get(classes[i], {}).get("disease") or classes[i].split("___")[-1].replace("_", " "),
+                        "confidence": round(float(probs[i]), 4),
+                    }
+                    for i in sorted_indices
+                ]
+        else:
+            top_idx = int(np.argmax(probs))
+            top_class = classes[top_idx]
+            top_confidence = float(probs[top_idx])
+            sorted_indices = np.argsort(probs)[::-1][:3]
+            result["top_candidates"] = [
+                {
+                    "class": classes[i],
+                    "crop": class_details.get(classes[i], {}).get("crop") or classes[i].split("___")[0].replace("_", " "),
+                    "disease": class_details.get(classes[i], {}).get("disease") or classes[i].split("___")[-1].replace("_", " "),
+                    "confidence": round(float(probs[i]), 4),
+                }
+                for i in sorted_indices
+            ]
 
         if not math.isfinite(top_confidence):
             result["warnings"].append("Non-finite probability encountered during inference.")

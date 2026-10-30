@@ -1065,6 +1065,38 @@ elif st.session_state.screen == 2:
         with leaf_col_left:
             st.markdown(f"#### 📷 {t('upload_photo', lang)}")
 
+            st.markdown("<div style='height: 0.6rem;'></div>", unsafe_allow_html=True)
+
+            # Target Crop Species Filter
+            crop_options = [
+                "🔍 Auto-Detect (All 14 Crops)",
+                "Tomato",
+                "Potato",
+                "Apple",
+                "Grape",
+                "Corn_(maize)",
+                "Pepper,_bell",
+                "Strawberry",
+                "Peach",
+                "Orange",
+                "Soybean",
+                "Squash",
+                "Cherry",
+            ]
+            c_idx = 0
+            if st.session_state.selected_crop_filter in crop_options:
+                c_idx = crop_options.index(st.session_state.selected_crop_filter)
+
+            selected_crop_choice = st.selectbox(
+                "🌾 Target Crop Species (Eliminates false cross-crop detections):",
+                options=crop_options,
+                index=c_idx,
+                key="crop_filter_select",
+                help="Conditioning inference on your known crop species prevents cross-species false positives.",
+            )
+            st.session_state.selected_crop_filter = selected_crop_choice
+
+            st.markdown("#### 📷 Leaf Image Acquisition")
             input_mode = st.radio(
                 "Acquisition Method:",
                 options=["📁 Upload Image", "📸 Click Photo (Camera)"],
