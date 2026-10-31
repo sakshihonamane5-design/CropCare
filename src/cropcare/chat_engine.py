@@ -14,7 +14,8 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
+FALLBACK_GEMINI_MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"]
 
 SYSTEM_INSTRUCTION = """You are the CropCare AI Assistant, an expert precision agronomy guide assisting farmers, growers, and agricultural students.
 
@@ -207,15 +208,30 @@ def generate_chat_response(
             system_instruction=full_system_instruction,
             temperature=0.4,
         )
-        response = client.models.generate_content(
-            model=resolved_model,
-            contents=formatted_contents,
-            config=config,
-        )
+        models_to_try = [resolved_model]
+        for fb in FALLBACK_GEMINI_MODELS:
+            if fb not in models_to_try:
+                models_to_try.append(fb)
 
-        if response and response.text:
-            return response.text.strip()
-        return "I processed your request, but received an empty response. Please try rephrasing your question."
+        last_api_err = None
+        for attempt_model in models_to_try:
+            try:
+                response = client.models.generate_content(
+                    model=attempt_model,
+                    contents=formatted_contents,
+                    config=config,
+                )
+                if response and response.text:
+                    return response.text.strip()
+                return "I processed your request, but received an empty response. Please try rephrasing your question."
+            except Exception as candidate_err:
+                last_api_err = candidate_err
+                err_s = str(candidate_err).lower()
+                if "404" in err_s or "503" in err_s or "unavailable" in err_s or "not_found" in err_s:
+                    continue
+                raise candidate_err
+        if last_api_err:
+            raise last_api_err
 
     except Exception as api_err:
         err_msg = str(api_err)
@@ -286,16 +302,34 @@ def verify_leaf_with_gemini_vision(
     )
 
     try:
-        response = client.models.generate_content(
-            model=resolved_model,
-            contents=[image, prompt],
-        )
-        if response and response.text:
-            return {
-                "status": "SUCCESS",
-                "verified": True,
-                "analysis": response.text.strip(),
-            }
+        models_to_try = [resolved_model]
+        for fb in FALLBACK_GEMINI_MODELS:
+            if fb not in models_to_try:
+                models_to_try.append(fb)
+
+        last_v_err = None
+        for attempt_model in models_to_try:
+            try:
+                response = client.models.generate_content(
+                    model=attempt_model,
+                    contents=[image, prompt],
+                )
+                if response and response.text:
+                    return {
+                        "status": "SUCCESS",
+                        "verified": True,
+                        "analysis": response.text.strip(),
+                    }
+            except Exception as candidate_v_err:
+                last_v_err = candidate_v_err
+                err_s = str(candidate_v_err).lower()
+                if "404" in err_s or "503" in err_s or "unavailable" in err_s or "not_found" in err_s:
+                    continue
+                raise candidate_v_err
+
+        if last_v_err:
+            raise last_v_err
+
         return {
             "status": "EMPTY_RESPONSE",
             "verified": False,
