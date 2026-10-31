@@ -1,11 +1,26 @@
 # 🌱 CropCare™ — Next-Generation Agricultural Intelligence Platform
 
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/deploy?repository=sakshihonamane5-design/CropCare&branch=main&mainModule=streamlit_app.py)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github)](https://github.com/sakshihonamane5-design/CropCare)
 [![Python Version](https://img.shields.io/badge/python-3.11-166534?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.2+-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.32+-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![Google Gemini](https://img.shields.io/badge/Google%20Gemini-3.5%20Flash-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
 [![Tests Passing](https://img.shields.io/badge/Tests-79%2F79%20Passed%20(100%25)-success?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
+
+---
+
+### 🌐 Live Cloud Application Links
+- 🚀 **1-Click Cloud Deployment**: [**Deploy on Streamlit Community Cloud**](https://share.streamlit.io/deploy?repository=sakshihonamane5-design/CropCare&branch=main&mainModule=streamlit_app.py)
+- 🔗 **Production App URL**: [**https://cropcare.streamlit.app**](https://cropcare.streamlit.app) *(or your Streamlit Community Cloud custom subdomain)*
+- 💻 **Source Code Repository**: [**https://github.com/sakshihonamane5-design/CropCare**](https://github.com/sakshihonamane5-design/CropCare)
+
+---
+
+<p align="center">
+  <img src="assets/farmer_hero.jpg" alt="CropCare Farmer Field Inspection" width="90%" style="border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);" />
+</p>
 
 > **CropCare™** bridges deep-learning foliar pathology diagnosis with hyper-local environmental climate telemetry, economic loss modeling, vernacular voice guidance, and zero-shot continual learning. Designed for smallholder farmers, agronomists, and agricultural extension officers across India and global farming communities.
 
@@ -14,28 +29,29 @@
 ## 📑 Table of Contents
 1. [The Systemic Problem & Our Solution](#-the-systemic-problem--our-solution)
 2. [Key Architectural Innovations](#-key-architectural-innovations)
-3. [6-Screen Guided Workflow](#-6-screen-guided-workflow)
+3. [Visual Gallery & Explainable AI Showcase](#-visual-gallery--explainable-ai-showcase)
+4. [6-Screen Guided Workflow](#-6-screen-guided-workflow)
    - [Screen 1: Welcome & Vernacular Command Center](#screen-1-welcome--vernacular-command-center)
    - [Screen 2: Diagnostic Leaf Screening & Field Advisory](#screen-2-diagnostic-leaf-screening--field-advisory)
    - [Screen 3: Climate Telemetry & Microclimate Risk Forecast](#screen-3-climate-telemetry--microclimate-risk-forecast)
    - [Screen 4: Executive Agronomy Summary & PDF Export](#screen-4-executive-agronomy-summary--pdf-export)
    - [Screen 5: Continual Learning Studio (Zero-Shot Adaptation)](#screen-5-continual-learning-studio-zero-shot-adaptation)
    - [Screen 6: Empirical Model Evaluation & Benchmarks (For Judges)](#screen-6-empirical-model-evaluation--benchmarks-for-judges)
-4. [AI Assistant & Gemini Multimodal Vision](#-ai-assistant--gemini-multimodal-vision)
-5. [Empirical Evaluation & Performance Benchmarks](#-empirical-evaluation--performance-benchmarks)
-6. [Supported Crops & Pathologies (38 Classes)](#-supported-crops--pathologies-38-classes)
-7. [Repository Structure](#-repository-structure)
-8. [Quick Start & Local Setup](#-quick-start--local-setup)
-9. [Configuration & API Keys](#-configuration--api-keys)
-10. [Test Suite Execution](#-test-suite-execution)
-11. [Deployment Options (Docker & Streamlit Cloud)](#-deployment-options)
-12. [License & Acknowledgements](#-license--acknowledgements)
+5. [AI Assistant & Gemini Multimodal Vision](#-ai-assistant--gemini-multimodal-vision)
+6. [Empirical Evaluation & Performance Benchmarks](#-empirical-evaluation--performance-benchmarks)
+7. [Supported Crops & Pathologies (38 Classes)](#-supported-crops--pathologies-38-classes)
+8. [Repository Structure](#-repository-structure)
+9. [Quick Start & Local Setup](#-quick-start--local-setup)
+10. [Cloud Deployment Guide (Streamlit Cloud & Docker)](#-cloud-deployment-guide)
+11. [Configuration & API Keys](#-configuration--api-keys)
+12. [Test Suite Execution (79/79 Passed)](#-test-suite-execution)
+13. [License & Acknowledgements](#-license--acknowledgements)
 
 ---
 
 ## 🌾 The Systemic Problem & Our Solution
 
-Smallholder farmers in the Global South lose **20% to 40% of their annual crop yield** to visual leaf pathologies, fungal blights, and extreme microclimate events. Traditional diagnostic tools suffer from four critical bottlenecks:
+Smallholder farmers in the Global South lose **20% to 40% of their annual crop yield** to visual leaf pathologies, fungal blights, and unpredictable climate swings. Traditional diagnostic tools suffer from four critical bottlenecks:
 1. **Isolated Computer Vision**: Most apps output a disease label without checking whether local environmental conditions (temperature, humidity, vapor pressure deficit) even support pathogen spore germination.
 2. **Catastrophic Forgetting & Rigid Classes**: Standard CNNs fail entirely when presented with unmonitored crops (such as Rice, Cotton, or Wheat) or novel regional pathologies.
 3. **Black-Box Skepticism**: Farmers and agronomists cannot tell if a model triggered on leaf lesions or laboratory background artifacts.
@@ -74,6 +90,24 @@ CropCare is an end-to-end agronomic intelligence system that synthesizes **Mobil
 │ Hands-Free Web Player   │        │ Treatment Cost & 8.4x ROI│       │ Toll-Free 1800-180-1551 │
 └─────────────────────────┘        └─────────────────────────┘        └─────────────────────────┘
 ```
+
+---
+
+## 🖼️ Visual Gallery & Explainable AI Showcase
+
+### 🔬 Grad-CAM Saliency Explainability (Original Leaf vs. Neural Heatmap)
+CropCare implements Gradient-weighted Class Activation Mapping to provide complete transparency. Agronomists can verify that neural predictions are driven by authentic necrotic lesions rather than background artifacts:
+
+<p align="center">
+  <img src="assets/gradcam_side_by_side.png" alt="Grad-CAM Saliency Side by Side" width="85%" style="border-radius: 12px; border: 1px solid #DFE7DB;" />
+</p>
+
+### 🌿 Curated Botanical Samples & Multi-Crop Gallery
+Pre-loaded test specimens across diverse agricultural species including Tomato, Potato, Corn, Apple, and Rice:
+
+<p align="center">
+  <img src="assets/botanical_samples_gallery.png" alt="Curated Botanical Samples" width="95%" style="border-radius: 12px; border: 1px solid #DFE7DB;" />
+</p>
 
 ---
 
@@ -251,6 +285,11 @@ CropCare/
 ├── README.md                   # Complete architectural documentation
 ├── .env.example                # Example environment variable template
 │
+├── assets/                     # Production visual assets & diagrams
+│   ├── farmer_hero.jpg         # Authentic agricultural field inspection visual
+│   ├── gradcam_side_by_side.png# Original leaf vs Grad-CAM saliency overlay
+│   └── botanical_samples_gallery.png # Curated test leaf showcase
+│
 ├── src/cropcare/               # Core Agronomic & AI Intelligence Engine
 │   ├── image_engine.py         # MobileNetV3 CNN inference, TTA & memory bank
 │   ├── explainability.py       # Grad-CAM attention heatmap generator
@@ -339,30 +378,22 @@ Open **`http://localhost:8501`** in your browser.
 
 ---
 
-## 🧪 Test Suite Execution
+## ☁️ Cloud Deployment Guide
 
-CropCare includes an automated, rigorous test suite covering all 10 core modules:
-```bash
-python -m pytest tests/ -v
-```
+CropCare is 100% cloud-ready and optimized for zero-configuration deployment:
 
-### Test Coverage Summary (79/79 Passed, 100%):
-- `tests/test_agronomy_engine.py` (6 tests): Foliar damage index, severity classification, 4-pillar nurturing.
-- `tests/test_chat_engine.py` (10 tests): API fallbacks, session context injection, prompt construction.
-- `tests/test_climate_engine.py` (28 tests): Geocoding, daily parsing, VPD, 30-day baseline anomalies.
-- `tests/test_economic_engine.py` (4 tests): Rupee yield loss calculation, treatment ROI, WhatsApp URLs.
-- `tests/test_evaluation_engine.py` (4 tests): Benchmark summary, confusion pairs, perturbation ablations.
-- `tests/test_image_engine.py` (10 tests): MobileNetV3 tensors, multi-view TTA, memory bank adaptation.
-- `tests/test_location_engine.py` (4 tests): Indian agricultural districts, offline fallbacks.
-- `tests/test_multilingual.py` (6 tests): All 6 vernacular lexicons, HTML5 audio speech generation.
-- `tests/test_standout_features.py` (6 tests): Rain-hold spray logic, Grad-CAM heatmaps, alignment divergence.
-- `tests/test_integration.py` (1 test): Full end-to-end pipeline synergy across all engines.
+### 1. 1-Click Streamlit Community Cloud (Recommended)
+1. Visit the pre-configured deployment link:  
+   👉 [**Deploy on Streamlit Community Cloud**](https://share.streamlit.io/deploy?repository=sakshihonamane5-design/CropCare&branch=main&mainModule=streamlit_app.py)
+2. Sign in with your GitHub account (`sakshihonamane5-design`).
+3. Under **Main file path**, ensure `streamlit_app.py` is selected.
+4. Under **App Settings > Secrets**, paste your Google Gemini API key:
+   ```toml
+   GEMINI_API_KEY = "your_gemini_api_key_here"
+   ```
+5. Click **Deploy!** Your app will be live globally with a custom URL such as `https://cropcare.streamlit.app`.
 
----
-
-## 🐳 Deployment Options
-
-### Docker Deployment
+### 2. Docker Container Deployment
 Build and run CropCare inside an isolated Docker container:
 ```bash
 # Build Docker image
@@ -373,15 +404,32 @@ docker run -d -p 8501:8501 -e GEMINI_API_KEY="your_key" --name cropcare_app crop
 ```
 Access at `http://localhost:8501`.
 
-### Streamlit Community Cloud
-1. Fork or push this repository to GitHub.
-2. Sign in to [share.streamlit.io](https://share.streamlit.io/).
-3. Select the repository `CropCare`, branch `main`, and main file `streamlit_app.py`.
-4. In **App Settings > Secrets**, configure:
-   ```toml
-   GEMINI_API_KEY = "your_key"
-   ```
-5. Click **Deploy**!
+### 3. Cloud PaaS (Railway / Render / Heroku)
+The repository includes a production-ready `Procfile`:
+```
+web: streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0
+```
+
+---
+
+## 🧪 Test Suite Execution (79/79 Passed)
+
+CropCare includes an automated, rigorous test suite covering all 10 core modules:
+```bash
+python -m pytest tests/ -v
+```
+
+### Test Coverage Summary:
+- `tests/test_agronomy_engine.py` (6 tests): Foliar damage index, severity classification, 4-pillar nurturing.
+- `tests/test_chat_engine.py` (10 tests): API fallbacks, session context injection, prompt construction.
+- `tests/test_climate_engine.py` (28 tests): Geocoding, daily parsing, VPD, 30-day baseline anomalies.
+- `tests/test_economic_engine.py` (4 tests): Rupee yield loss calculation, treatment ROI, WhatsApp URLs.
+- `tests/test_evaluation_engine.py` (4 tests): Benchmark summary, confusion pairs, perturbation ablations.
+- `tests/test_image_engine.py` (10 tests): MobileNetV3 tensors, multi-view TTA, memory bank adaptation.
+- `tests/test_location_engine.py` (4 tests): Indian agricultural districts, offline fallbacks.
+- `tests/test_multilingual.py` (6 tests): All 6 vernacular lexicons, HTML5 audio speech generation.
+- `tests/test_standout_features.py` (6 tests): Rain-hold spray logic, Grad-CAM heatmaps, alignment divergence.
+- `tests/test_integration.py` (1 test): Full end-to-end pipeline synergy across all engines.
 
 ---
 
