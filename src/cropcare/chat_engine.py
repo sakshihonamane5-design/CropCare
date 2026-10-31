@@ -86,6 +86,8 @@ def build_agronomic_context(
         2: "Leaf Screening",
         3: "Climate Insights",
         4: "Executive Summary",
+        5: "Continual Learning Studio",
+        6: "Model Evaluation & Benchmarks",
     }
     active_screen_name = screen_names.get(screen, f"Step {screen}")
 

@@ -67,6 +67,22 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "ta": "4. இறுதி அறிக்கை",
         "es": "4. Resumen Ejecutivo",
     },
+    "step_5": {
+        "en": "5. Continual Studio",
+        "hi": "५. सतत शिक्षण स्टूडियो",
+        "mr": "५. सतत शिक्षण स्टुडिओ",
+        "te": "5. నిరంతర అభ్యాసం",
+        "ta": "5. தொடர் கற்றல்",
+        "es": "5. Estudio Continuo",
+    },
+    "step_6": {
+        "en": "6. Model Evaluation",
+        "hi": "६. मॉडल मूल्यांकन",
+        "mr": "६. मॉडेल मूल्यमापन",
+        "te": "6. మోడల్ మూల్యాంకనం",
+        "ta": "6. மாதிரி மதிப்பீடு",
+        "es": "6. Evaluación del Modelo",
+    },
     "precision_tech": {
         "en": "Precision Agricultural Technology",
         "hi": "सटीक कृषि प्रौद्योगिकी",
